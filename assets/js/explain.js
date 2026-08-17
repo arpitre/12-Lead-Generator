@@ -407,9 +407,10 @@ window.EKG = window.EKG || {};
 
     if (cfg.ischemia === 'wellens_a' || cfg.ischemia === 'wellens_b') {
       body.push('**Wellens syndrome.** ' + (cfg.ischemia === 'wellens_a'
-        ? 'Type A: biphasic T waves in V2-V3, going up then down.'
-        : 'Type B: deep, symmetric T wave inversion in V2-V4.') +
+        ? 'Type A, the less common of the two: the ST segment leaves the J point barely elevated, arcs up into a broad rounded positive hump, then descends through the baseline into a shallower terminal negative trough. That up-then-down shape is what "biphasic" means — and the order matters, because a T wave that goes negative first and then positive is a different animal entirely.'
+        : 'Type B, about three quarters of cases: deep, symmetric, rounded T wave inversion in V2 to V4. Symmetric is the operative word — the downstroke and the upstroke mirror each other, unlike the asymmetric T inversion of LVH strain, which slopes down gently and snaps back.') +
         ' The defining context is as important as the tracing: the pattern appears when the patient is *pain free*, the R waves are preserved (no infarct yet), and there are no pathologic Q waves and little or no ST elevation.');
+      body.push('Notice the distribution. The changes sit in the anterior chest leads and fade out by V5 and V6, and the limb leads are untouched. That is not a quirk of drawing — it tells you the abnormal repolarisation is pointing backwards, away from the front of the chest, which is exactly where the LAD territory sits.');
       body.push('It represents a critically stenosed proximal LAD that has spontaneously reperfused. The muscle is alive but the artery is about to close again. These patients look well and feel well and have a very high rate of anterior infarction within days. They need a cath lab, not a treadmill.');
     }
 

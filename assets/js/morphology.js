@@ -29,6 +29,15 @@ window.EKG = window.EKG || {};
     t: function (u) { return asym(u, 0.62); },
     tSym: function (u) { return asym(u, 0.5); },
     tPeaked: function (u) { return Math.pow(asym(u, 0.5), 2.2); },
+    /* Wellens Type A. Negative over the first ~60% (vector anterior, so the
+     * chest leads go up into a broad rounded hump), then positive over the
+     * remainder (vector posterior, giving the shallower terminal inversion).
+     * The terminal limb is deliberately smaller than the hump. */
+    wellensBiphasic: function (u) {
+      return u < 0.60
+        ? -Math.sin(Math.PI * u / 0.60)
+        : 0.90 * Math.sin(Math.PI * (u - 0.60) / 0.40);
+    },
     u: function (u) { return asym(u, 0.5); },
     // Slow, ramped upstroke -- the WPW delta wave.
     delta: function (u) { return u * u * (3 - 2 * u); },
@@ -203,6 +212,7 @@ window.EKG = window.EKG || {};
       tAmp: 0.32,
       tDir: axisDir(alpha - 12, -0.10),
       tShape: 't',
+      tExtra: null,            // optional second repolarisation vector
       stVec: [0, 0, 0],
       stShape: 'flat',
       uAmp: 0,
@@ -363,15 +373,36 @@ window.EKG = window.EKG || {};
 
     // Patterns that are not a simple injury vector get handled first.
     if (cfg.ischemia === 'wellens_a' || cfg.ischemia === 'wellens_b') {
-      // Critical proximal LAD stenosis, currently reperfused: R waves intact,
-      // no ST elevation, but the anterior T waves are abnormal.
-      tpl.tDir = unit([0.10, -0.05, 0.95]);  // posterior T vector = inverted anteriorly
-      tpl.tAmp = cfg.ischemia === 'wellens_b' ? 0.55 : 0.38;
-      tpl.tShape = 'tSym';
-      if (cfg.ischemia === 'wellens_a') {
-        tpl.overlays.push({
-          leads: ['V2', 'V3'], t0: 'tStart', dur: 90, amp: 0.22, shape: 'bump', tag: 'biphasic'
-        });
+      /* Critical proximal LAD stenosis, currently reperfused: R waves intact,
+       * no significant ST elevation, but the anterior T waves are abnormal.
+       *
+       * Modelled as an extra repolarisation vector pointing straight
+       * POSTERIOR, added on top of the normal T rather than replacing it.
+       * That direction is the whole trick: a purely posterior vector has zero
+       * projection onto all six limb leads, because they lie in the frontal
+       * plane. So it inverts V1-V4 hardest, fades through V5, and leaves V6
+       * and every limb lead untouched -- which is precisely the distribution
+       * Wellens has. Replacing the T vector outright (the previous approach)
+       * flattened the limb leads, which real Wellens does not do.
+       *
+       * The normal T is trimmed a little so the added vector can carry the
+       * anterior leads negative without needing an implausible magnitude. */
+      if (cfg.ischemia === 'wellens_b') {
+        // Type B: deep, symmetric, rounded T inversion in V2-V4.
+        tpl.tAmp = 0.22;
+        tpl.tExtra = { amp: 0.26, dir: [0, 0, 1], shape: 'tSym' };
+      } else {
+        /* Type A: biphasic. The ST-T leaves the J point slightly elevated,
+         * arcs up into a broad rounded positive hump, then descends through
+         * the baseline into a shallower terminal negative trough.
+         *
+         * A negative shape value points the vector anterior (upright in the
+         * chest leads) and a positive one points it posterior (inverted), so
+         * one biphasic shape produces the whole up-then-down morphology. */
+        tpl.tAmp = 0.18;
+        tpl.tExtra = { amp: 0.105, dir: [0, 0, 1], shape: 'wellensBiphasic' };
+        tpl.stVec = add(tpl.stVec, scale(unit([0.05, 0.0, -1]), 0.05));
+        tpl.stShape = 'oblique';
       }
       return tpl;
     }

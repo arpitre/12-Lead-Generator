@@ -119,6 +119,15 @@ window.EKG = window.EKG || {};
         tpl.tAmp * gain, tpl.tDir, M.SHAPES[tpl.tShape] || M.SHAPES.t);
     }
 
+    /* An additional repolarisation vector over the same window, added to the
+     * normal T rather than replacing it. Used for the Wellens patterns, where
+     * a purely posterior vector confines the abnormality to the chest leads. */
+    if (tpl.tExtra && tpl.tExtra.amp) {
+      paint(buf.vx, buf.vy, buf.vz, fs, tStart, tEnd,
+        tpl.tExtra.amp * gain, L.unit(tpl.tExtra.dir),
+        M.SHAPES[tpl.tExtra.shape] || M.SHAPES.tSym);
+    }
+
     // U wave (hypokalemia).
     if (tpl.uAmp > 0) {
       paint(buf.vx, buf.vy, buf.vz, fs, tEnd + 0.03, tEnd + 0.03 + tpl.uDur / 1000,
