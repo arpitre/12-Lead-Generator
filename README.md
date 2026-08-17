@@ -140,6 +140,38 @@ Ventricular and paced beats are painted into a second buffer and projected with 
 chest-lead gains, because a broad muscle-to-muscle wavefront couples to the precordial
 electrodes very differently from a compact His-Purkinje dipole.
 
+### Calibrating against real recordings (PTB-XL)
+
+The constants in `leads.js` and `morphology.js` were tuned by eye against published
+morphology. `tools/ptbxl_profile.py` replaces that with measurements taken from real
+clinical ECGs.
+
+[PTB-XL](https://physionet.org/content/ptb-xl/1.0.3/) is 21,799 clinical 12-leads from
+18,869 patients, annotated with SCP diagnostic statements. The script reads a local copy
+**in place** and writes one small JSON of aggregate statistics — a median P-QRS-T beat
+and an amplitude summary for each diagnosis, in each of the twelve leads:
+
+```bash
+pip install wfdb numpy pandas
+python tools/ptbxl_profile.py "D:/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3"
+# -> assets/data/ptbxl-profiles.json   (a few hundred KB)
+```
+
+Only medians computed across hundreds of records are written out; no individual patient
+recording is copied or redistributed. PTB-XL is published under CC BY 4.0, and the
+attribution that licence requires is embedded in the output file.
+
+The dataset itself is ~2 GB and is deliberately **not** committed here. Only the derived
+profile is.
+
+That profile is useful in two ways. It lets per-lead gains, amplitudes and ST magnitudes
+be set from real distributions instead of estimated. More importantly it turns "does this
+tracing look right?" into a number: a synthesized beat can be compared against the median
+real beat for the same diagnosis, lead by lead. Every morphology bug found so far was
+caught by a clinician's eye rather than by the automated checks, because the checks test
+properties that were chosen after the fact. A reference beat tests the whole shape at
+once, including whatever nobody thought to assert.
+
 ### Measurements are measured, not asserted
 The ST deviations quoted in the explanation are sampled off the rendered signal 40 ms
 past the J point against the TP baseline — the same place a human reader puts their eye
