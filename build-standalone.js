@@ -31,14 +31,19 @@ const SCRIPTS = [
   'assets/js/app.js'
 ];
 
-const html = read('index.html');
+const html = read('simulator/index.html');
 const css = read('assets/css/app.css');
 
-// Pull the page markup out of index.html and drop the <script src> tags,
+// Pull the page markup out of the app page and drop the <script src> tags,
 // so the two entry points can never drift apart.
 const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-if (!bodyMatch) throw new Error('could not find <body> in index.html');
-const body = bodyMatch[1].replace(/<script\s+src=[^>]*><\/script>/gi, '').trim();
+if (!bodyMatch) throw new Error('could not find <body> in simulator/index.html');
+const body = bodyMatch[1]
+  .replace(/<script\s+src=[^>]*><\/script>/gi, '')
+  // Links marked data-site-only point at the rest of the site (the landing
+  // page), which does not exist beside a single file on a USB stick.
+  .replace(/<a[^>]*\sdata-site-only[^>]*>[\s\S]*?<\/a>\s*/gi, '')
+  .trim();
 
 const titleMatch = html.match(/<title>([\s\S]*?)<\/title>/i);
 const title = titleMatch ? titleMatch[1].trim() : '12-Lead EKG Generator';

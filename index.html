@@ -3,85 +3,223 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>12-Lead EKG Generator</title>
-<meta name="description" content="Generate realistic simulated 12-lead ECG tracings for paramedic students and preceptors, with blind interpretation mode and step-by-step explanations.">
-<link rel="stylesheet" href="assets/css/app.css">
+<title>12 Lead Simulator — practice ECG interpretation on unlimited cases</title>
+<meta name="description" content="A 12-lead ECG simulator for paramedic students, nurses and preceptors. Unlimited simulated tracings across 85 case types, a blind mode for testing, and a step-by-step walkthrough of why each interpretation is what it is.">
+<link rel="canonical" href="https://12leadsimulator.com/">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://12leadsimulator.com/">
+<meta property="og:title" content="12 Lead Simulator — practice ECG interpretation on unlimited cases">
+<meta property="og:description" content="Unlimited simulated 12-lead ECGs across 85 case types, a blind mode for testing, and a walkthrough of the reasoning behind every interpretation.">
+<meta property="og:image" content="https://12leadsimulator.com/assets/img/og-cover.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="assets/css/landing.css">
+<script>
+  /* Case links shared before the simulator moved to /simulator/ carry the case
+   * in the fragment. Forward them rather than dropping someone on the pitch. */
+  (function () {
+    if (/^#c=/.test(location.hash)) location.replace('simulator/' + location.hash);
+  })();
+</script>
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand">
+<header class="nav">
+  <a class="brand" href="./">
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 40 16" width="40" height="16"><polyline points="0,8 7,8 9,3 12,13 15,8 22,8 24,6 26,10 28,8 40,8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
     </span>
-    <span>
-      <strong>12-Lead Generator</strong>
-      <small>Paramedic interpretation practice</small>
-    </span>
-  </div>
-
-  <div class="toolbar">
-    <button id="btnPanel" class="btn btn-ghost" aria-expanded="false">Case builder</button>
-    <button id="btnRandom" class="btn">Random case</button>
-    <select id="randomScope" class="select-inline" aria-label="Restrict random cases to a topic"></select>
-    <span class="tb-sep" aria-hidden="true"></span>
-    <button id="btnBlind" class="btn btn-primary" aria-pressed="false">Blind mode: off</button>
-    <button id="btnReveal" class="btn" hidden>Reveal interpretation</button>
-    <span class="tb-sep" aria-hidden="true"></span>
-    <button id="btnCalipers" class="btn btn-ghost" aria-pressed="false">Calipers: off</button>
-    <button id="btnShare" class="btn btn-ghost">Share case</button>
-    <button id="btnPrint" class="btn btn-ghost">Print</button>
-  </div>
+    <span class="brand-text">12 Lead Simulator</span>
+  </a>
+  <nav class="nav-links">
+    <a href="#what">What it does</a>
+    <a href="#cases">Case library</a>
+    <a href="#how">How it works</a>
+    <a class="btn btn-primary btn-sm" href="simulator/">Open the simulator</a>
+  </nav>
 </header>
 
-<div id="shareBox" class="sharebox" hidden>
-  <label for="shareUrl">Shareable link</label>
-  <input id="shareUrl" type="text" readonly>
-  <p id="shareNote">Copy the link — it reproduces this exact tracing.</p>
-  <button id="btnCloseShare" class="btn btn-sm btn-ghost">Close</button>
-</div>
+<main>
 
-<div class="layout">
-
-  <aside class="panel" id="panel" aria-label="Case builder">
-    <div class="panel-inner">
-      <div class="panel-head">
-        <label for="presetSelect">Start from a case</label>
-        <select id="presetSelect"></select>
-        <p class="ctl-hint">Pick a preset to fill every box below, then change anything you like.</p>
-        <button id="btnGenerate" class="btn btn-primary btn-block">Generate new tracing</button>
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">For paramedic students, nurses and preceptors</p>
+      <h1>Stop running out of ECGs to practice on.</h1>
+      <p class="lede">
+        Every tracing here is generated from a working model of the heart's electrical
+        vector — so the axis, the reciprocal changes and the R-wave progression are all
+        genuinely there, not drawn in by hand. Build any case you can describe, hand it to
+        a student with the answer hidden, then reveal the reasoning line by line.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary btn-lg" href="simulator/">Open the simulator</a>
+        <a class="btn btn-ghost btn-lg" href="#cases">See sample cases</a>
       </div>
-      <div id="controls"></div>
-      <p class="panel-foot">
-        Every control feeds one physiologic model — the tracing is built from a simulated
-        cardiac vector, so reciprocal changes, axis shifts and R-wave progression follow
-        automatically rather than being drawn in by hand.
+      <p class="cta-note">Opens on a normal sinus rhythm. No account, no download, works on a phone.</p>
+    </div>
+    <figure class="hero-figure">
+      <img src="assets/img/hero-12-lead.svg" alt="A simulated 12-lead ECG showing normal sinus rhythm, with the measurement block and interpretation across the top" width="1200" height="700" loading="eager">
+      <figcaption>An actual tracing from the simulator — normal sinus rhythm, 72 bpm.</figcaption>
+    </figure>
+  </section>
+
+  <section class="strip-band">
+    <div class="wrap band-grid">
+      <div><strong>85</strong><span>preset cases, from normal to pre-arrest</span></div>
+      <div><strong>∞</strong><span>variations — findings stack on each other</span></div>
+      <div><strong>0</strong><span>accounts, installs or cost to get started</span></div>
+    </div>
+  </section>
+
+  <section id="what" class="wrap section">
+    <h2>What you can do with it</h2>
+    <div class="cards">
+      <article class="card">
+        <h3>Build the case you're teaching</h3>
+        <p>
+          Pick a rhythm, then stack findings the way real patients present them — an
+          inferior STEMI <em>with</em> a Wenckebach <em>with</em> muscle tremor artifact.
+          Rate, ectopy, AV block, axis, bundle branch and fascicular block, pre-excitation,
+          pacing, infarct territory and stage, chamber enlargement, electrolytes, overdose
+          patterns, right-sided and posterior leads.
+        </p>
+      </article>
+      <article class="card">
+        <h3>Test without giving it away</h3>
+        <p>
+          Blind mode hides the measurements, the machine interpretation, the case name and
+          the whole control panel. The student gets a tracing and nothing else — the way it
+          arrives on a real call. Share the link and it opens blind on their device too.
+        </p>
+      </article>
+      <article class="card">
+        <h3>Show the <em>why</em>, not just the answer</h3>
+        <p>
+          Reveal walks the tracing in the order it should be read: rate, rhythm, axis,
+          intervals, morphology, ST segments, then the anatomy — which wall, which artery,
+          and what complication to expect next. It's the explanation a good preceptor gives
+          over a coffee, attached to every case.
+        </p>
+      </article>
+      <article class="card">
+        <h3>Measure it like paper</h3>
+        <p>
+          Drag the on-screen calipers across any lead for real time and voltage readings.
+          The tracing is drawn at a true 25 mm/s and 10 mm/mV on real ECG paper, so a box
+          is a box — and it prints that way for a written exam.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section id="cases" class="wrap section">
+    <h2>Sample cases</h2>
+    <p class="section-lede">
+      Three of the 85, rendered by the simulator right now. Every one of them is a live
+      case in the app, not a screenshot of a textbook.
+    </p>
+    <div class="samples">
+      <figure class="sample">
+        <img src="assets/img/case-normal.svg" alt="Leads II and V2 of a normal sinus rhythm" loading="lazy">
+        <figcaption><strong>Normal sinus rhythm</strong> — the baseline every other case is judged against.</figcaption>
+      </figure>
+      <figure class="sample">
+        <img src="assets/img/case-inferior-stemi.svg" alt="Lead III showing ST elevation with reciprocal depression in aVL" loading="lazy">
+        <figcaption><strong>Inferior STEMI</strong> — elevation in III with the reciprocal depression in aVL falling out of the model on its own.</figcaption>
+      </figure>
+      <figure class="sample">
+        <img src="assets/img/case-heart-block.svg" alt="Leads II and V1 showing complete heart block with a junctional escape rhythm" loading="lazy">
+        <figcaption><strong>Complete heart block</strong> — P waves marching through at their own rate, independent of the escape.</figcaption>
+      </figure>
+    </div>
+    <p class="center">
+      <a class="btn btn-primary btn-lg" href="simulator/">Open the simulator</a>
+    </p>
+  </section>
+
+  <section id="how" class="section band">
+    <div class="wrap">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>
+          <span class="step-n">1</span>
+          <h3>Open a case</h3>
+          <p>It starts on a normal sinus rhythm. Choose a preset from the library, or open the case builder and set the findings yourself.</p>
+        </li>
+        <li>
+          <span class="step-n">2</span>
+          <h3>Turn on blind mode</h3>
+          <p>Everything that would give the answer away disappears. Hand over the tablet, or send the link — it opens blind for them as well.</p>
+        </li>
+        <li>
+          <span class="step-n">3</span>
+          <h3>Reveal and talk it through</h3>
+          <p>The walkthrough gives the reasoning step by step, so the debrief is about the electricity rather than about who guessed right.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <h2>Why the tracings hold up</h2>
+    <div class="two-col">
+      <div>
+        <p>
+          Most practice ECGs are drawings. Someone sketched an ST elevation into three leads
+          and left the rest of the tracing alone — so a student who looks for the reciprocal
+          change finds nothing, and quietly learns that it doesn't matter.
+        </p>
+        <p>
+          This one simulates the heart as an electrical vector in three dimensions and
+          projects that vector onto all twelve leads. Move the axis and every lead responds.
+          Infarct a wall and the leads facing it elevate while the leads opposite it depress,
+          because that is what the geometry does.
+        </p>
+      </div>
+      <div>
+        <p>
+          The result is a tracing that rewards the habits you want students to build:
+          comparing III to II, checking aVL before believing an inferior STEMI, walking the
+          precordium for R-wave progression.
+        </p>
+        <p>
+          It also means the case library isn't a fixed set of pictures. Any combination of
+          findings you can describe clinically, the model can render — including the ugly
+          ones with artifact on top.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section cta-band">
+    <div class="wrap center">
+      <h2>Ready to run a case?</h2>
+      <p class="lede">Free to use, in the browser, starting on a normal sinus rhythm.</p>
+      <a class="btn btn-primary btn-lg" href="simulator/">Open the simulator</a>
+      <p class="cta-note">
+        Teaching a class or a whole program? Classroom features — assignable case sets,
+        student progress, and a printable question bank — are in development.
+        <a href="mailto:hello@12leadsimulator.com?subject=12%20Lead%20Simulator%20for%20our%20program">Tell us what you need</a>.
       </p>
     </div>
-  </aside>
+  </section>
 
-  <main class="content">
-    <div class="case-head">
-      <h1 id="caseTitle" class="case-title">Loading…</h1>
-    </div>
+</main>
 
-    <div id="tracing" class="tracing"></div>
-    <p id="caliperReadout" class="caliper-readout" hidden>Drag across the tracing to measure.</p>
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <p class="disclaimer">
+      <strong>Training use only.</strong> Every tracing on this site is computer generated.
+      Nothing here comes from a patient, and nothing here is a substitute for clinical
+      judgement, a real 12-lead, or your local protocols.
+    </p>
+    <p class="colophon">
+      12 Lead Simulator · <a href="simulator/">Simulator</a> ·
+      <a href="https://github.com/arpitre/12-Lead-Generator">Source on GitHub</a>
+    </p>
+  </div>
+</footer>
 
-    <section id="explanation" class="explanation" aria-live="polite"></section>
-  </main>
-
-</div>
-
-<script src="assets/js/leads.js"></script>
-<script src="assets/js/morphology.js"></script>
-<script src="assets/js/rhythm.js"></script>
-<script src="assets/js/generator.js"></script>
-<script src="assets/js/interpret.js"></script>
-<script src="assets/js/catalog.js"></script>
-<script src="assets/js/explain.js"></script>
-<script src="assets/js/render.js"></script>
-<script src="assets/js/calipers.js"></script>
-<script src="assets/js/app.js"></script>
 </body>
 </html>
