@@ -412,12 +412,20 @@ window.EKG = window.EKG || {};
     if (!state.cfg) return;
     var h = 'c=' + encodeCfg(state.cfg);
     if (state.blind && !state.revealed) h += '&blind=1';
-    history.replaceState(null, '', '#' + h);
+    state.hash = h;
+    // Sandboxed frames (and file:// in some browsers) reject history writes.
+    // Sharing still works from state.hash, so a failure here is not fatal.
+    try {
+      history.replaceState(null, '', '#' + h);
+    } catch (e) { /* keep the case in memory instead */ }
   }
 
   function shareLink() {
     updateHash();
-    var url = location.href;
+    // Build the URL from state rather than location.href, so the link is still
+    // correct when the page could not write to history.
+    var base = location.href.split('#')[0];
+    var url = base + '#' + (state.hash || '');
     var box = $('shareBox');
     var input = $('shareUrl');
     input.value = url;
