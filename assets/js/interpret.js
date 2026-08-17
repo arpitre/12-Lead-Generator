@@ -171,6 +171,12 @@ window.EKG = window.EKG || {};
     if (r === 'accel_junctional') return 'ACCELERATED JUNCTIONAL RHYTHM';
     if (r === 'junctional_tach') return 'JUNCTIONAL TACHYCARDIA';
 
+    /* Severe hyperkalaemia paralyses atrial muscle: the sinus node is still
+     * driving, but nothing depolarises the atria visibly, so there are no P
+     * waves to call a sinus rhythm from. Calling this "sinus bradycardia"
+     * because the config says sinus would describe a tracing nobody can see. */
+    if (cfg.pattern === 'hyperk_severe') return 'WIDE COMPLEX RHYTHM, NO VISIBLE P WAVES';
+
     if (cfg.avblock === 'third') return 'COMPLETE HEART BLOCK';
 
     /* When beats are being dropped, the sinus node is not the thing that is
@@ -258,14 +264,14 @@ window.EKG = window.EKG || {};
      * normal conduction system. A ventricular or paced complex generates its
      * own large discordant ST shift that has nothing to do with ischemia, so
      * no ST statement gets issued at all. */
-    var stReadable = (result.dominantKind || 'supraventricular') === 'supraventricular' &&
-      cfg.rhythm !== 'vfib' && cfg.rhythm !== 'asystole';
+    var wideComplex = (result.dominantKind || 'supraventricular') !== 'supraventricular';
+    var stReadable = !wideComplex &&
+      cfg.rhythm !== 'vfib' && cfg.rhythm !== 'asystole' &&
+      cfg.pattern !== 'hyperk_severe';   // a sine wave has no ST segment at all
 
     if (!stReadable) {
       elev = []; depr = [];
-      if (cfg.rhythm !== 'vfib' && cfg.rhythm !== 'asystole') {
-        lines.push('ST-T ABNORMAL, SECONDARY TO WIDE COMPLEX RHYTHM');
-      }
+      if (wideComplex) lines.push('ST-T ABNORMAL, SECONDARY TO WIDE COMPLEX RHYTHM');
     }
 
     if (stReadable && terr && cfg.stage !== 'old') {

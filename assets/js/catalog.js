@@ -417,7 +417,7 @@ window.EKG = window.EKG || {};
     // --- metabolic / tox
     P('Hyperkalemia, peaked T waves', 'Metabolic & tox', { rhythm: 'sinus', rate: 76, pattern: 'hyperk_mild' }),
     P('Hyperkalemia, moderate', 'Metabolic & tox', { rhythm: 'sinus', rate: 68, pattern: 'hyperk_moderate' }),
-    P('Hyperkalemia, sine wave', 'Metabolic & tox', { rhythm: 'sinus', rate: 58, pattern: 'hyperk_severe' },
+    P('Hyperkalemia, sine wave', 'Metabolic & tox', { rhythm: 'sinus', rate: 80, pattern: 'hyperk_severe' },
       'Pre-arrest. If the QRS is merging into the T wave, calcium goes in before anything else.'),
     P('Hypokalemia with U waves', 'Metabolic & tox', { rhythm: 'sinus', rate: 78, pattern: 'hypok' }),
     P('Hypocalcemia (long QT)', 'Metabolic & tox', { rhythm: 'sinus', rate: 70, pattern: 'hypocalcemia' }),

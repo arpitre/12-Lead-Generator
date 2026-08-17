@@ -484,7 +484,7 @@ window.EKG = window.EKG || {};
 
   /* ------------------------------------------- metabolic / other patterns */
 
-  function applyPattern(tpl, cfg) {
+  function applyPattern(tpl, cfg, meanRR) {
     switch (cfg.pattern) {
       case 'hyperk_mild':
         tpl.tAmp = 0.78; tpl.tDur = 120; tpl.tShape = 'tPeaked';
@@ -495,11 +495,50 @@ window.EKG = window.EKG || {};
         stretchQrs(tpl, 125);
         break;
       case 'hyperk_severe':
-        tpl.tAmp = 1.05; tpl.tDur = 150; tpl.tShape = 'tPeaked';
-        tpl.pAmp = 0; tpl.pr = 0;
-        stretchQrs(tpl, 175);
-        mainLobe(tpl).amp *= 0.85;
-        tpl.stSeg = 30;   // QRS blends straight into T: the "sine wave"
+        /* The pre-terminal sine wave. The defining feature is not simply that
+         * the QRS is wide -- it is that depolarisation and repolarisation have
+         * merged into one continuous undulation with NO isoelectric baseline
+         * anywhere on the tracing. So the waveform is sized as a fraction of
+         * the cardiac cycle rather than given fixed durations: a broad hump of
+         * depolarisation running straight into an equally broad, fully
+         * discordant repolarisation trough, filling essentially the whole R-R.
+         *
+         * Fixed durations were what made this look merely "wide": 355 ms of
+         * complex inside a 1034 ms cycle left two thirds of every beat sitting
+         * flat on the baseline. */
+        var cycle = (meanRR > 0 ? meanRR : 0.8) * 1000;
+        var sineMain = mainLobe(tpl);
+        dropLobe(tpl, 'septal');
+        dropLobe(tpl, 'terminal');
+        tpl.pAmp = 0; tpl.pr = 0;              // atrial muscle is paralysed
+        sineMain.t0 = 0;
+        sineMain.t1 = Math.min(480, cycle * 0.48);
+        sineMain.amp = 1.00;
+        sineMain.dir = axisDir(axisAngle(cfg), 0.25);
+        tpl.qrsDur = sineMain.t1;
+        tpl.stSeg = 0;                          // no ST segment survives
+
+        /* The vector has to rotate through the cycle. With repolarisation
+         * exactly anti-parallel to depolarisation, any lead perpendicular to
+         * that single axis records nothing at all for the whole complex, and
+         * the tracing comes out with two dead-flat leads -- something a real
+         * sine wave never shows. A late depolarisation lobe swung round to a
+         * different direction, plus a T vector that is broadly opposed rather
+         * than exactly mirrored, keeps every lead alive. */
+        tpl.lobes.push({
+          t0: sineMain.t1 * 0.35, t1: sineMain.t1, amp: 0.55,
+          dir: axisDir(axisAngle(cfg) + 55, -0.35), shape: 'bump', tag: 'sineLate'
+        });
+
+        tpl.tDur = Math.min(500, cycle * 0.50);
+        tpl.tAmp = 0.95;
+        tpl.tShape = 'tSym';
+        tpl.tDir = unit([
+          Math.cos((axisAngle(cfg) + 220) * Math.PI / 180),
+          Math.sin((axisAngle(cfg) + 220) * Math.PI / 180),
+          -0.50
+        ]);
+        tpl.sineWave = true;
         break;
       case 'hypok':
         tpl.tAmp = 0.10; tpl.uAmp = 0.22; tpl.uDur = 160;
@@ -640,6 +679,8 @@ window.EKG = window.EKG || {};
    * falsely short QTc and a tachycardia with a falsely long one. */
   function adaptToRate(tpl, meanRR) {
     if (!meanRR || meanRR <= 0) return tpl;
+    // A sine wave is already sized to the cycle; rescaling would undo that.
+    if (tpl.sineWave) return tpl;
     var k = Math.sqrt(meanRR / 0.8);
     k = Math.max(0.72, Math.min(1.38, k));
     tpl.stSeg *= k;
@@ -653,7 +694,7 @@ window.EKG = window.EKG || {};
     applyConduction(tpl, cfg);
     applyChambers(tpl, cfg);
     applyIschemia(tpl, cfg);
-    applyPattern(tpl, cfg);
+    applyPattern(tpl, cfg, meanRR);
     adaptToRate(tpl, meanRR);
 
     if (cfg.prInterval) tpl.pr = cfg.prInterval;

@@ -350,6 +350,13 @@ window.EKG = window.EKG || {};
     var terr = EKG.morphology.TERRITORIES[cfg.ischemia];
 
     if (!interp.stReadable) {
+      if (cfg.pattern === 'hyperk_severe') {
+        return section('st', 'ST segments & T waves', 'No measurable ST segment — the complex is one continuous wave', [
+          'There is no ST segment to measure here, and no isoelectric baseline to measure it against. Depolarisation and repolarisation have merged into a single continuous undulation — the QRS runs straight into the T wave with nothing flat in between, which is what the phrase "sine wave" is describing.',
+          'That absence is itself the finding. If you cannot tell where the QRS ends and the T wave begins, stop looking for ST elevation and start treating hyperkalaemia. This pattern sits immediately before ventricular fibrillation or asystole.',
+          'Calcium first — it stabilises the myocardial membrane within minutes and buys the time to shift and remove the potassium. It does not lower the potassium itself, so shifting agents and definitive removal still have to follow.'
+        ]);
+      }
       if (cfg.rhythm === 'vfib' || cfg.rhythm === 'asystole') {
         return section('st', 'ST segments & T waves', 'Not applicable',
           ['There is no organised depolarisation, so there is no ST segment to measure. This is a rhythm problem, not a 12-lead interpretation problem.']);
