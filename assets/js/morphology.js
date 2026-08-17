@@ -22,6 +22,15 @@ window.EKG = window.EKG || {};
     return 0.5 * (1 + Math.cos(Math.PI * (u - peak) / (1 - peak)));
   }
 
+  /* A raised cosine blended toward a triangle, with the apex placed anywhere
+   * in the lobe rather than fixed at the midpoint, and the blend adjustable:
+   * more triangle gives a sharper apex and straighter limbs. */
+  function sineBlend(u, peak, tri) {
+    var w = tri === undefined ? 0.38 : tri;
+    var ramp = u <= peak ? u / peak : (1 - u) / (1 - peak);
+    return (1 - w) * asym(u, peak) + w * ramp;
+  }
+
   var SHAPES = {
     bump: bump,
     p: function (u) { return asym(u, 0.45); },
@@ -29,13 +38,18 @@ window.EKG = window.EKG || {};
     t: function (u) { return asym(u, 0.62); },
     tSym: function (u) { return asym(u, 0.5); },
     tPeaked: function (u) { return Math.pow(asym(u, 0.5), 2.2); },
-    /* Sine-wave lobe: a raised cosine blended toward a triangle. A pure
+    /* Sine-wave lobes: a raised cosine blended toward a triangle. A pure
      * cosine reads as a drawn mathematical sine; real sine-wave hyperkalaemia
-     * has noticeably sharper apices than that. */
-    sineLobe: function (u) {
-      return 0.62 * (0.5 * (1 - Math.cos(2 * Math.PI * u))) +
-             0.38 * (1 - Math.abs(2 * u - 1));
-    },
+     * has noticeably sharper apices than that.
+     *
+     * The two skewed variants are what stop the tracing looking like a
+     * function plot. On a real sine wave the limbs are not mirror images:
+     * depolarisation rises quickly to its apex and then leans over into the
+     * trough, and the trough itself is lazier still, dragging back toward the
+     * next complex. */
+    sineLobe:      function (u) { return sineBlend(u, 0.50); },
+    sineLobeEarly: function (u) { return sineBlend(u, 0.34, 0.58); },
+    sineLobeLate:  function (u) { return sineBlend(u, 0.56, 0.30); },
     /* Wellens Type A. Negative over the first ~60% (vector anterior, so the
      * chest leads go up into a broad rounded hump), then positive over the
      * remainder (vector posterior, giving the shallower terminal inversion).
@@ -512,17 +526,29 @@ window.EKG = window.EKG || {};
          *
          * Fixed durations were what made this look merely "wide": 355 ms of
          * complex inside a 1034 ms cycle left two thirds of every beat sitting
-         * flat on the baseline. */
+         * flat on the baseline.
+         *
+         * Amplitude is deliberately modest. A dying myocardium conducting
+         * through depolarised, potassium-loaded muscle does not generate large
+         * forces: published sine-wave tracings run around 5-10 mm in the limb
+         * leads, with only the near-field chest leads getting much past that.
+         * Drawing it at full QRS voltage produces a huge symmetrical
+         * oscillation that reads as a signal generator rather than an ECG. */
         var cycle = (meanRR > 0 ? meanRR : 0.8) * 1000;
         var sineMain = mainLobe(tpl);
         dropLobe(tpl, 'septal');
         dropLobe(tpl, 'terminal');
         tpl.pAmp = 0; tpl.pr = 0;              // atrial muscle is paralysed
         sineMain.t0 = 0;
-        sineMain.t1 = Math.min(480, cycle * 0.48);
-        sineMain.amp = 1.30;
-        sineMain.shape = 'sineLobe';
-        sineMain.dir = axisDir(axisAngle(cfg), 0.25);
+        sineMain.t1 = Math.min(420, cycle * 0.40);
+        sineMain.amp = 0.72;
+        sineMain.shape = 'sineLobeEarly';
+        /* Strongly posterior, as a conduction-system-independent wavefront
+         * crawling through muscle tends to be. With only a token posterior
+         * component the vector sat almost perpendicular to V3/V4, which left
+         * the mid-precordial leads flatter than the limb leads -- the reverse
+         * of what these tracings show. */
+        sineMain.dir = axisDir(axisAngle(cfg), 0.55);
         tpl.qrsDur = sineMain.t1;
         tpl.stSeg = 0;                          // no ST segment survives
 
@@ -534,18 +560,42 @@ window.EKG = window.EKG || {};
          * different direction, plus a T vector that is broadly opposed rather
          * than exactly mirrored, keeps every lead alive. */
         tpl.lobes.push({
-          t0: sineMain.t1 * 0.35, t1: sineMain.t1, amp: 0.62,
-          dir: axisDir(axisAngle(cfg) + 55, -0.35), shape: 'sineLobe', tag: 'sineLate'
+          t0: sineMain.t1 * 0.35, t1: sineMain.t1, amp: 0.34,
+          dir: axisDir(axisAngle(cfg) + 55, -0.35), shape: 'sineLobeLate', tag: 'sineLate'
         });
 
-        tpl.tDur = Math.min(500, cycle * 0.50);
-        tpl.tAmp = 1.15;
-        tpl.tShape = 'sineLobe';
+        /* Repolarisation takes longer than depolarisation even here, so the
+         * trough is the broader half of the undulation: the complex reads as a
+         * quicker deflection leaning into a long, lazy discordant wave rather
+         * than two matched halves of a plotted sine. */
+        tpl.tDur = Math.min(560, cycle * 0.58);
+        tpl.tAmp = 0.62;
+        tpl.tShape = 'sineLobeLate';
+        /* Close to opposed, but not exactly: 20 degrees past the reciprocal of
+         * the QRS axis. At the 40 degrees this used to use, the T came out
+         * concordant in the lateral leads, so V4-V6 drew two positive humps
+         * per beat and never crossed the baseline at all. A sine wave is
+         * discordant everywhere. */
         tpl.tDir = unit([
-          Math.cos((axisAngle(cfg) + 220) * Math.PI / 180),
-          Math.sin((axisAngle(cfg) + 220) * Math.PI / 180),
-          -0.50
+          Math.cos((axisAngle(cfg) + 200) * Math.PI / 180),
+          Math.sin((axisAngle(cfg) + 200) * Math.PI / 180),
+          -0.55
         ]);
+        /* A quadrature lobe, straddling the junction between the two halves of
+         * the undulation and pointing off to one side of the main axis.
+         *
+         * Depolarisation and repolarisation here are nearly opposed, which
+         * means they fall to nothing in the same place: any lead lying across
+         * that axis records almost nothing for the whole cycle, and V4 came
+         * out as a flat line between two undulating neighbours. A component
+         * that peaks where the other two cross zero turns the vector's
+         * back-and-forth into a rotation, so every lead keeps an undulation --
+         * differing in size and in phase, which is what separates a real sine
+         * wave from twelve copies of one drawn wave. */
+        tpl.lobes.push({
+          t0: sineMain.t1 * 0.55, t1: sineMain.t1 + tpl.tDur * 0.55, amp: 0.34,
+          dir: axisDir(axisAngle(cfg) - 30, -0.72), shape: 'sineLobe', tag: 'sineMid'
+        });
         tpl.sineWave = true;
         break;
       case 'hypok':
