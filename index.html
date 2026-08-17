@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12-Lead EKG Generator — Paramedic Training</title>
+<meta name="description" content="Generate realistic simulated 12-lead ECG tracings for paramedic students and preceptors, with blind interpretation mode and step-by-step explanations.">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 40 16" width="40" height="16"><polyline points="0,8 7,8 9,3 12,13 15,8 22,8 24,6 26,10 28,8 40,8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </span>
+    <span>
+      <strong>12-Lead Generator</strong>
+      <small>Paramedic interpretation practice</small>
+    </span>
+  </div>
+
+  <div class="toolbar">
+    <button id="btnPanel" class="btn btn-ghost" aria-expanded="false">Case builder</button>
+    <button id="btnRandom" class="btn">Random case</button>
+    <select id="randomScope" class="select-inline" aria-label="Restrict random cases to a topic"></select>
+    <span class="tb-sep" aria-hidden="true"></span>
+    <button id="btnBlind" class="btn btn-primary" aria-pressed="false">Blind mode: off</button>
+    <button id="btnReveal" class="btn" hidden>Reveal interpretation</button>
+    <span class="tb-sep" aria-hidden="true"></span>
+    <button id="btnCalipers" class="btn btn-ghost" aria-pressed="false">Calipers: off</button>
+    <button id="btnShare" class="btn btn-ghost">Share case</button>
+    <button id="btnPrint" class="btn btn-ghost">Print</button>
+  </div>
+</header>
+
+<div id="shareBox" class="sharebox" hidden>
+  <label for="shareUrl">Shareable link</label>
+  <input id="shareUrl" type="text" readonly>
+  <p id="shareNote">Copy the link — it reproduces this exact tracing.</p>
+  <button id="btnCloseShare" class="btn btn-sm btn-ghost">Close</button>
+</div>
+
+<div class="layout">
+
+  <aside class="panel" id="panel" aria-label="Case builder">
+    <div class="panel-inner">
+      <div class="panel-head">
+        <label for="presetSelect">Start from a case</label>
+        <select id="presetSelect"></select>
+        <p class="ctl-hint">Pick a preset to fill every box below, then change anything you like.</p>
+        <button id="btnGenerate" class="btn btn-primary btn-block">Generate new tracing</button>
+      </div>
+      <div id="controls"></div>
+      <p class="panel-foot">
+        Every control feeds one physiologic model — the tracing is built from a simulated
+        cardiac vector, so reciprocal changes, axis shifts and R-wave progression follow
+        automatically rather than being drawn in by hand.
+      </p>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="case-head">
+      <h1 id="caseTitle" class="case-title">Loading…</h1>
+    </div>
+
+    <div id="tracing" class="tracing"></div>
+    <p id="caliperReadout" class="caliper-readout" hidden>Drag across the tracing to measure.</p>
+
+    <section id="explanation" class="explanation" aria-live="polite"></section>
+  </main>
+
+</div>
+
+<script src="assets/js/leads.js"></script>
+<script src="assets/js/morphology.js"></script>
+<script src="assets/js/rhythm.js"></script>
+<script src="assets/js/generator.js"></script>
+<script src="assets/js/interpret.js"></script>
+<script src="assets/js/catalog.js"></script>
+<script src="assets/js/explain.js"></script>
+<script src="assets/js/render.js"></script>
+<script src="assets/js/calipers.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
