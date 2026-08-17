@@ -206,6 +206,10 @@ window.EKG = window.EKG || {};
 
     body.push('**QT / QTc: ' + m.qt + ' ms / ' + m.qtc + ' ms corrected.** The QT has to be corrected for rate because it shortens as the heart speeds up; the QTc here uses Bazett\'s formula (QT divided by the square root of the R-R interval in seconds). A rough field check is that the QT should be less than half the preceding R-R interval at normal rates.');
 
+    if (m.hr > 110) {
+      body.push('Be careful with that corrected value at this rate. Bazett\'s formula systematically over-corrects when the heart is fast, so a tachycardic patient will often show a QTc over 460 ms with a perfectly ordinary QT. Look at the raw QT and the shape of the T wave before treating it as real QT prolongation.');
+    }
+
     var wideRhythm = (r.dominantKind || 'supraventricular') !== 'supraventricular';
     if (wideRhythm) {
       body.push('Treat that QTc as a number the machine printed rather than a finding. When the ventricles are depolarised abnormally, repolarisation is abnormal too, so the QT is prolonged as a consequence of the rhythm — it says nothing about drug effect, electrolytes or torsades risk.');

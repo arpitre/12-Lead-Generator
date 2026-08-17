@@ -56,9 +56,21 @@ window.EKG = window.EKG || {};
     var qrsOnset = beat.t;
     var j = qrsOnset + tpl.qrsDur / 1000;
     var stAt = j + 0.04;
-    var baseStart = qrsOnset - (tpl.pr / 1000) - 0.09;
-    var baseEnd = qrsOnset - (tpl.pr / 1000) - 0.02;
-    if (!tpl.pr || tpl.pr <= 0) { baseStart = qrsOnset - 0.10; baseEnd = qrsOnset - 0.03; }
+
+    /* Reference the PR segment -- the flat stretch between the end of the P
+     * wave and the start of the QRS.
+     *
+     * The TP segment is the textbook zero, but it shrinks to nothing as the
+     * rate climbs: at 130 bpm there is barely 10 ms of it, and sampling there
+     * lands on the tail of the previous T wave. That manufactured 2-3 mm of
+     * ST depression across every lead of a plain sinus tachycardia, with
+     * matching elevation in aVR -- a textbook left-main pattern conjured out
+     * of a normal fast heart. The PR segment stays put at any rate. */
+    var baseEnd = qrsOnset - 0.008;
+    var prSegLen = (tpl.pr - tpl.pDur) / 1000;
+    var baseStart = (tpl.pr > 0 && prSegLen > 0.02)
+      ? Math.max(qrsOnset - prSegLen + 0.004, baseEnd - 0.030)
+      : baseEnd - 0.025;
 
     var st = {}, rAmp = {}, sAmp = {}, tAmp = {};
     result.leadNames.forEach(function (name) {

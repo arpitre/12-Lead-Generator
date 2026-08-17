@@ -381,7 +381,7 @@ window.EKG = window.EKG || {};
     P('Extensive anterior STEMI', 'STEMI', { rhythm: 'sinus_tach', rate: 112, ischemia: 'extensive_anterior', severity: 'marked', qWaves: true },
       'Big territory, sick patient. Expect pump failure rather than the bradycardia you see with inferior infarcts.'),
     P('Lateral STEMI', 'STEMI', { rhythm: 'sinus', rate: 88, ischemia: 'lateral', severity: 'moderate' }),
-    P('High lateral STEMI', 'STEMI', { rhythm: 'sinus', rate: 84, ischemia: 'high_lateral', severity: 'subtle' },
+    P('High lateral STEMI', 'STEMI', { rhythm: 'sinus', rate: 84, ischemia: 'high_lateral', severity: 'moderate' },
       'Only I and aVL are up, and the reciprocal depression in III is often more obvious than the elevation itself.'),
     P('Posterior STEMI (isolated)', 'STEMI', { rhythm: 'sinus', rate: 78, ischemia: 'posterior', severity: 'moderate', extraLeads: 'posterior' },
       'Nothing is elevated on the standard 12-lead. You are reading the mirror image in V1-V3: tall R, ST depression, upright T.'),

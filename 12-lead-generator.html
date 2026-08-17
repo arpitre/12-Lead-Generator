@@ -544,17 +544,66 @@ window.EKG = window.EKG || {};
     coved: function (u) { return 1 - 0.55 * u * u; }
   };
 
-  /* ST-segment envelopes. Each is evaluated over the ST segment (0..1); the
-   * elevation then decays linearly across the T wave so the beat returns to
-   * baseline. */
+  /* ST-segment contours, evaluated across the ST segment (0..1).
+   *
+   * The shape is the single most useful discriminator between a real occlusion
+   * and its mimics, so these are kept deliberately distinct:
+   *   convex / oblique -> acute STEMI (domed or obliquely straight takeoff)
+   *   concave          -> early repolarisation and pericarditis (saddle)
+   *   upslope          -> de Winter
+   *   downslope        -> LVH strain
+   *   sagging          -> digitalis effect
+   */
   var ST_SHAPES = {
-    flat:     function (u) { return 1; },
-    concave:  function (u) { return 1 - 0.18 * Math.sin(Math.PI * u); },
-    convex:   function (u) { return 1 + 0.22 * Math.sin(Math.PI * u); },
-    upslope:  function (u) { return 1 - 0.75 * u; },
+    flat:      function (u) { return 1; },
+    oblique:   function (u) { return 1 + 0.55 * u; },
+    concave:   function (u) { return 1 - 0.20 * Math.sin(Math.PI * u); },
+    // Domed, and monotonic all the way into the T: a real STEMI's ST segment
+    // never dips back before the T wave starts.
+    convex:    function (u) { return 1 + 0.30 * Math.sin(Math.PI * u * 0.5); },
+    upslope:   function (u) { return 1 - 0.75 * u; },
     downslope: function (u) { return 0.45 + 0.75 * u; },
-    sagging:  function (u) { return 0.35 + 1.15 * Math.sin(Math.PI * u * 0.85); }
+    sagging:   function (u) { return 0.35 + 1.15 * Math.sin(Math.PI * u * 0.85); }
   };
+
+  function smoothstep(u) { return u * u * (3 - 2 * u); }
+
+  /* The injury current is a standing DC offset, not something that switches on
+   * when the QRS finishes. It is already flowing while the ventricle is still
+   * depolarising, so the terminal limb of the QRS descends onto the elevated
+   * level instead of returning to the isoelectric line -- which is why the J
+   * point of a real STEMI is itself elevated, and why the ST segment and T
+   * wave fuse into a single dome whose apex sits only a little above the J
+   * point.
+   *
+   * Getting this wrong produces the classic tell-tale of a fake tracing: a
+   * QRS that lands on the baseline followed by a detached rectangular
+   * plateau. Both the main renderer and the precordial gain correction call
+   * this one function so the two can never disagree.
+   */
+  function stEnvelope(tpl, t, qrsEnd, tStart, tEnd) {
+    var shape = ST_SHAPES[tpl.stShape] || ST_SHAPES.flat;
+    var ramp = Math.min(0.040, (tpl.qrsDur / 1000) * 0.45);
+    var rampStart = qrsEnd - ramp;
+
+    if (t < rampStart) return 0;
+
+    // Rising through the tail of the QRS to meet an already-elevated J point.
+    if (t < qrsEnd) return shape(0) * smoothstep((t - rampStart) / ramp);
+
+    // The ST segment proper.
+    if (t <= tStart) {
+      var d = tStart - qrsEnd;
+      return shape(d > 0 ? (t - qrsEnd) / d : 0);
+    }
+
+    /* Across the T wave: hold the level through the ascent and apex, then
+     * release over the terminal limb, so ST and T read as one dome that
+     * returns to baseline rather than a T riding down a ramp. */
+    var v = (t - tStart) / Math.max(1e-6, tEnd - tStart);
+    if (v <= 0.5) return shape(1);
+    return shape(1) * (1 - smoothstep((v - 0.5) / 0.5));
+  }
 
   /* ----------------------------------------------------------- territories */
 
@@ -609,7 +658,7 @@ window.EKG = window.EKG || {};
       wall: 'posterior (inferobasal) wall', leads: 'V7-V9; mirror change in V1-V3'
     },
     inferoposterior: {
-      label: 'Inferoposterior', dir: [0.05, 0.75, 0.80], artery: 'Dominant RCA or circumflex',
+      label: 'Inferoposterior', dir: [0.05, 0.88, 0.72], artery: 'Dominant RCA or circumflex',
       wall: 'inferior and posterior walls', leads: 'II, III, aVF + mirror in V1-V3'
     },
     subendocardial: {
@@ -619,9 +668,9 @@ window.EKG = window.EKG || {};
     }
   };
 
-  /* Calibrated so that the ST deviation actually measured 40 ms past the J
-   * point matches the label: ~1 mm subtle, ~2.5 mm moderate, ~4.5 mm marked. */
-  var SEVERITY = { subtle: 0.16, moderate: 0.33, marked: 0.56, tombstone: 0.82 };
+  /* Calibrated so the ST deviation actually measured 40 ms past the J point
+   * matches the label: ~1 mm subtle, ~2.5 mm moderate, ~4.5 mm marked. */
+  var SEVERITY = { subtle: 0.085, moderate: 0.21, marked: 0.38, tombstone: 0.60 };
 
   /* ------------------------------------------------------------ base beat */
 
@@ -846,14 +895,14 @@ window.EKG = window.EKG || {};
     var dir = unit(terr.dir);
 
     if (cfg.stage === 'hyperacute') {
-      // Earliest minutes: the T wave grows fat and tall over the infarct
-      // before the ST segment lifts.
-      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.35));
-      tpl.stShape = 'concave';
+      // Earliest minutes: the T wave grows fat and broad-based over the
+      // infarct before the ST segment properly lifts.
+      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.55));
+      tpl.stShape = 'oblique';
       tpl.tDir = unit(add(scale(tpl.tDir, 0.25), scale(dir, 1.0)));
-      tpl.tAmp = 0.85;
+      tpl.tAmp = 0.80;
       tpl.tShape = 'tSym';
-      tpl.tDur = 200;
+      tpl.tDur = 210;
     } else if (cfg.stage === 'evolving') {
       // Hours to days: ST settles, Q waves appear, T waves invert.
       tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.45));
@@ -867,11 +916,15 @@ window.EKG = window.EKG || {};
       tpl.lobes.unshift({ t0: 0, t1: 42, amp: 0.62, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
       tpl.tDir = unit(add(scale(tpl.tDir, 0.6), scale(dir, -0.5)));
     } else {
-      // Acute: the classic injury pattern.
+      /* Acute: the classic injury pattern. Real STEMI takes off convex
+       * ("domed") or obliquely straight -- never the concave saddle of early
+       * repolarisation or pericarditis. The T wave is deliberately modest
+       * here because the injury offset carries most of the height: the apex
+       * of a STEMI's ST-T dome sits only a little above its J point. */
       tpl.stVec = add(tpl.stVec, scale(dir, mag));
-      tpl.stShape = (cfg.severity === 'marked' || cfg.severity === 'tombstone') ? 'convex' : 'concave';
+      tpl.stShape = (cfg.severity === 'marked' || cfg.severity === 'tombstone') ? 'convex' : 'oblique';
       tpl.tDir = unit(add(scale(tpl.tDir, 0.45), scale(dir, 0.85)));
-      tpl.tAmp = 0.48;
+      tpl.tAmp = 0.18;
       if (cfg.qWaves) {
         tpl.lobes.unshift({ t0: 0, t1: 40, amp: mag * 1.5, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
       }
@@ -1064,6 +1117,7 @@ window.EKG = window.EKG || {};
     TERRITORIES: TERRITORIES,
     SEVERITY: SEVERITY,
     build: build,
+    stEnvelope: stEnvelope,
     adaptToRate: adaptToRate,
     baseTemplate: baseTemplate,
     ventricularTemplate: ventricularTemplate,
@@ -1564,19 +1618,16 @@ window.EKG = window.EKG || {};
         lo.amp * gain, dir, M.SHAPES[lo.shape] || M.SHAPES.bump);
     }
 
-    // Injury current: held across the ST segment, then fading through the T
-    // wave so the tracing lands back on the baseline.
+    /* Injury current. It begins before the QRS finishes, so the terminal limb
+     * lands on an already-elevated J point (see M.stEnvelope). */
     var stMag = Math.sqrt(tpl.stVec[0] * tpl.stVec[0] + tpl.stVec[1] * tpl.stVec[1] + tpl.stVec[2] * tpl.stVec[2]);
     if (stMag > 1e-4) {
       var stDir = L.unit(tpl.stVec);
-      var stShape = M.ST_SHAPES[tpl.stShape] || M.ST_SHAPES.flat;
-      var i0 = Math.round(qrsEnd * fs), iST = Math.round(tStart * fs), i1 = Math.round(tEnd * fs);
-      for (var s = i0; s <= i1 && s < buf.vx.length; s++) {
-        if (s < 0) continue;
-        var env;
-        if (s <= iST) env = stShape(iST > i0 ? (s - i0) / (iST - i0) : 0);
-        else env = stShape(1) * (1 - (s - iST) / Math.max(1, i1 - iST));
-        var v = env * stMag * gain;
+      var sStart = Math.round((qrsEnd - 0.05) * fs);
+      var sEnd = Math.round(tEnd * fs);
+      for (var s = Math.max(0, sStart); s <= sEnd && s < buf.vx.length; s++) {
+        var v = M.stEnvelope(tpl, s / fs, qrsEnd, tStart, tEnd) * stMag * gain;
+        if (v === 0) continue;
         buf.vx[s] += v * stDir[0];
         buf.vy[s] += v * stDir[1];
         buf.vz[s] += v * stDir[2];
@@ -1829,19 +1880,15 @@ window.EKG = window.EKG || {};
       var stDir = L.unit(tpl.stVec);
       var proj = L.dot(stDir, u);
       var d = leadData[name];
-      var stShape = M.ST_SHAPES[tpl.stShape] || M.ST_SHAPES.flat;
       sched.complexes.forEach(function (c) {
         if (c.kind === 'pvc' || c.kind === 'ventricular' || c.kind === 'paced') return;
         var qrsEnd = c.t + tpl.qrsDur / 1000;
         var tStart = qrsEnd + tpl.stSeg / 1000;
         var tEnd = tStart + tpl.tDur / 1000;
-        var i0 = Math.round(qrsEnd * fs), iST = Math.round(tStart * fs), i1 = Math.round(tEnd * fs);
-        for (var s = i0; s <= i1 && s < n; s++) {
-          if (s < 0) continue;
-          var env = s <= iST
-            ? stShape(iST > i0 ? (s - i0) / (iST - i0) : 0)
-            : stShape(1) * (1 - (s - iST) / Math.max(1, i1 - iST));
-          d[s] += env * stMag * proj * (sg - qg);
+        var sStart = Math.round((qrsEnd - 0.05) * fs);
+        var sEnd = Math.round(tEnd * fs);
+        for (var s = Math.max(0, sStart); s <= sEnd && s < n; s++) {
+          d[s] += M.stEnvelope(tpl, s / fs, qrsEnd, tStart, tEnd) * stMag * proj * (sg - qg);
         }
       });
     });
@@ -1985,9 +2032,21 @@ window.EKG = window.EKG || {};
     var qrsOnset = beat.t;
     var j = qrsOnset + tpl.qrsDur / 1000;
     var stAt = j + 0.04;
-    var baseStart = qrsOnset - (tpl.pr / 1000) - 0.09;
-    var baseEnd = qrsOnset - (tpl.pr / 1000) - 0.02;
-    if (!tpl.pr || tpl.pr <= 0) { baseStart = qrsOnset - 0.10; baseEnd = qrsOnset - 0.03; }
+
+    /* Reference the PR segment -- the flat stretch between the end of the P
+     * wave and the start of the QRS.
+     *
+     * The TP segment is the textbook zero, but it shrinks to nothing as the
+     * rate climbs: at 130 bpm there is barely 10 ms of it, and sampling there
+     * lands on the tail of the previous T wave. That manufactured 2-3 mm of
+     * ST depression across every lead of a plain sinus tachycardia, with
+     * matching elevation in aVR -- a textbook left-main pattern conjured out
+     * of a normal fast heart. The PR segment stays put at any rate. */
+    var baseEnd = qrsOnset - 0.008;
+    var prSegLen = (tpl.pr - tpl.pDur) / 1000;
+    var baseStart = (tpl.pr > 0 && prSegLen > 0.02)
+      ? Math.max(qrsOnset - prSegLen + 0.004, baseEnd - 0.030)
+      : baseEnd - 0.025;
 
     var st = {}, rAmp = {}, sAmp = {}, tAmp = {};
     result.leadNames.forEach(function (name) {
@@ -2641,7 +2700,7 @@ window.EKG = window.EKG || {};
     P('Extensive anterior STEMI', 'STEMI', { rhythm: 'sinus_tach', rate: 112, ischemia: 'extensive_anterior', severity: 'marked', qWaves: true },
       'Big territory, sick patient. Expect pump failure rather than the bradycardia you see with inferior infarcts.'),
     P('Lateral STEMI', 'STEMI', { rhythm: 'sinus', rate: 88, ischemia: 'lateral', severity: 'moderate' }),
-    P('High lateral STEMI', 'STEMI', { rhythm: 'sinus', rate: 84, ischemia: 'high_lateral', severity: 'subtle' },
+    P('High lateral STEMI', 'STEMI', { rhythm: 'sinus', rate: 84, ischemia: 'high_lateral', severity: 'moderate' },
       'Only I and aVL are up, and the reciprocal depression in III is often more obvious than the elevation itself.'),
     P('Posterior STEMI (isolated)', 'STEMI', { rhythm: 'sinus', rate: 78, ischemia: 'posterior', severity: 'moderate', extraLeads: 'posterior' },
       'Nothing is elevated on the standard 12-lead. You are reading the mirror image in V1-V3: tall R, ST depression, upright T.'),
@@ -2959,6 +3018,10 @@ window.EKG = window.EKG || {};
     if (m.qrs >= 120) flags.push('wide QRS');
 
     body.push('**QT / QTc: ' + m.qt + ' ms / ' + m.qtc + ' ms corrected.** The QT has to be corrected for rate because it shortens as the heart speeds up; the QTc here uses Bazett\'s formula (QT divided by the square root of the R-R interval in seconds). A rough field check is that the QT should be less than half the preceding R-R interval at normal rates.');
+
+    if (m.hr > 110) {
+      body.push('Be careful with that corrected value at this rate. Bazett\'s formula systematically over-corrects when the heart is fast, so a tachycardic patient will often show a QTc over 460 ms with a perfectly ordinary QT. Look at the raw QT and the shape of the T wave before treating it as real QT prolongation.');
+    }
 
     var wideRhythm = (r.dominantKind || 'supraventricular') !== 'supraventricular';
     if (wideRhythm) {

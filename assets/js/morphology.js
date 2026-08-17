@@ -35,17 +35,66 @@ window.EKG = window.EKG || {};
     coved: function (u) { return 1 - 0.55 * u * u; }
   };
 
-  /* ST-segment envelopes. Each is evaluated over the ST segment (0..1); the
-   * elevation then decays linearly across the T wave so the beat returns to
-   * baseline. */
+  /* ST-segment contours, evaluated across the ST segment (0..1).
+   *
+   * The shape is the single most useful discriminator between a real occlusion
+   * and its mimics, so these are kept deliberately distinct:
+   *   convex / oblique -> acute STEMI (domed or obliquely straight takeoff)
+   *   concave          -> early repolarisation and pericarditis (saddle)
+   *   upslope          -> de Winter
+   *   downslope        -> LVH strain
+   *   sagging          -> digitalis effect
+   */
   var ST_SHAPES = {
-    flat:     function (u) { return 1; },
-    concave:  function (u) { return 1 - 0.18 * Math.sin(Math.PI * u); },
-    convex:   function (u) { return 1 + 0.22 * Math.sin(Math.PI * u); },
-    upslope:  function (u) { return 1 - 0.75 * u; },
+    flat:      function (u) { return 1; },
+    oblique:   function (u) { return 1 + 0.55 * u; },
+    concave:   function (u) { return 1 - 0.20 * Math.sin(Math.PI * u); },
+    // Domed, and monotonic all the way into the T: a real STEMI's ST segment
+    // never dips back before the T wave starts.
+    convex:    function (u) { return 1 + 0.30 * Math.sin(Math.PI * u * 0.5); },
+    upslope:   function (u) { return 1 - 0.75 * u; },
     downslope: function (u) { return 0.45 + 0.75 * u; },
-    sagging:  function (u) { return 0.35 + 1.15 * Math.sin(Math.PI * u * 0.85); }
+    sagging:   function (u) { return 0.35 + 1.15 * Math.sin(Math.PI * u * 0.85); }
   };
+
+  function smoothstep(u) { return u * u * (3 - 2 * u); }
+
+  /* The injury current is a standing DC offset, not something that switches on
+   * when the QRS finishes. It is already flowing while the ventricle is still
+   * depolarising, so the terminal limb of the QRS descends onto the elevated
+   * level instead of returning to the isoelectric line -- which is why the J
+   * point of a real STEMI is itself elevated, and why the ST segment and T
+   * wave fuse into a single dome whose apex sits only a little above the J
+   * point.
+   *
+   * Getting this wrong produces the classic tell-tale of a fake tracing: a
+   * QRS that lands on the baseline followed by a detached rectangular
+   * plateau. Both the main renderer and the precordial gain correction call
+   * this one function so the two can never disagree.
+   */
+  function stEnvelope(tpl, t, qrsEnd, tStart, tEnd) {
+    var shape = ST_SHAPES[tpl.stShape] || ST_SHAPES.flat;
+    var ramp = Math.min(0.040, (tpl.qrsDur / 1000) * 0.45);
+    var rampStart = qrsEnd - ramp;
+
+    if (t < rampStart) return 0;
+
+    // Rising through the tail of the QRS to meet an already-elevated J point.
+    if (t < qrsEnd) return shape(0) * smoothstep((t - rampStart) / ramp);
+
+    // The ST segment proper.
+    if (t <= tStart) {
+      var d = tStart - qrsEnd;
+      return shape(d > 0 ? (t - qrsEnd) / d : 0);
+    }
+
+    /* Across the T wave: hold the level through the ascent and apex, then
+     * release over the terminal limb, so ST and T read as one dome that
+     * returns to baseline rather than a T riding down a ramp. */
+    var v = (t - tStart) / Math.max(1e-6, tEnd - tStart);
+    if (v <= 0.5) return shape(1);
+    return shape(1) * (1 - smoothstep((v - 0.5) / 0.5));
+  }
 
   /* ----------------------------------------------------------- territories */
 
@@ -100,7 +149,7 @@ window.EKG = window.EKG || {};
       wall: 'posterior (inferobasal) wall', leads: 'V7-V9; mirror change in V1-V3'
     },
     inferoposterior: {
-      label: 'Inferoposterior', dir: [0.05, 0.75, 0.80], artery: 'Dominant RCA or circumflex',
+      label: 'Inferoposterior', dir: [0.05, 0.88, 0.72], artery: 'Dominant RCA or circumflex',
       wall: 'inferior and posterior walls', leads: 'II, III, aVF + mirror in V1-V3'
     },
     subendocardial: {
@@ -110,9 +159,9 @@ window.EKG = window.EKG || {};
     }
   };
 
-  /* Calibrated so that the ST deviation actually measured 40 ms past the J
-   * point matches the label: ~1 mm subtle, ~2.5 mm moderate, ~4.5 mm marked. */
-  var SEVERITY = { subtle: 0.16, moderate: 0.33, marked: 0.56, tombstone: 0.82 };
+  /* Calibrated so the ST deviation actually measured 40 ms past the J point
+   * matches the label: ~1 mm subtle, ~2.5 mm moderate, ~4.5 mm marked. */
+  var SEVERITY = { subtle: 0.085, moderate: 0.21, marked: 0.38, tombstone: 0.60 };
 
   /* ------------------------------------------------------------ base beat */
 
@@ -337,14 +386,14 @@ window.EKG = window.EKG || {};
     var dir = unit(terr.dir);
 
     if (cfg.stage === 'hyperacute') {
-      // Earliest minutes: the T wave grows fat and tall over the infarct
-      // before the ST segment lifts.
-      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.35));
-      tpl.stShape = 'concave';
+      // Earliest minutes: the T wave grows fat and broad-based over the
+      // infarct before the ST segment properly lifts.
+      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.55));
+      tpl.stShape = 'oblique';
       tpl.tDir = unit(add(scale(tpl.tDir, 0.25), scale(dir, 1.0)));
-      tpl.tAmp = 0.85;
+      tpl.tAmp = 0.80;
       tpl.tShape = 'tSym';
-      tpl.tDur = 200;
+      tpl.tDur = 210;
     } else if (cfg.stage === 'evolving') {
       // Hours to days: ST settles, Q waves appear, T waves invert.
       tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.45));
@@ -358,11 +407,15 @@ window.EKG = window.EKG || {};
       tpl.lobes.unshift({ t0: 0, t1: 42, amp: 0.62, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
       tpl.tDir = unit(add(scale(tpl.tDir, 0.6), scale(dir, -0.5)));
     } else {
-      // Acute: the classic injury pattern.
+      /* Acute: the classic injury pattern. Real STEMI takes off convex
+       * ("domed") or obliquely straight -- never the concave saddle of early
+       * repolarisation or pericarditis. The T wave is deliberately modest
+       * here because the injury offset carries most of the height: the apex
+       * of a STEMI's ST-T dome sits only a little above its J point. */
       tpl.stVec = add(tpl.stVec, scale(dir, mag));
-      tpl.stShape = (cfg.severity === 'marked' || cfg.severity === 'tombstone') ? 'convex' : 'concave';
+      tpl.stShape = (cfg.severity === 'marked' || cfg.severity === 'tombstone') ? 'convex' : 'oblique';
       tpl.tDir = unit(add(scale(tpl.tDir, 0.45), scale(dir, 0.85)));
-      tpl.tAmp = 0.48;
+      tpl.tAmp = 0.18;
       if (cfg.qWaves) {
         tpl.lobes.unshift({ t0: 0, t1: 40, amp: mag * 1.5, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
       }
@@ -555,6 +608,7 @@ window.EKG = window.EKG || {};
     TERRITORIES: TERRITORIES,
     SEVERITY: SEVERITY,
     build: build,
+    stEnvelope: stEnvelope,
     adaptToRate: adaptToRate,
     baseTemplate: baseTemplate,
     ventricularTemplate: ventricularTemplate,

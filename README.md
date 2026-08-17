@@ -95,6 +95,15 @@ A heartbeat is assembled from a few vector lobes:
 | T wave | roughly concordant with the main lobe | normal upright T |
 | Injury (ST) | outward through the ischaemic wall | ST elevation and depression |
 
+The injury current is modelled as a standing DC offset that is already flowing while
+the ventricle is still depolarising — not something switched on when the QRS ends. That
+one detail is what makes the morphology read as real: the terminal limb of the QRS
+descends *onto* the elevated level instead of returning to the isoelectric line, so the
+J point is itself elevated and the ST segment and T wave fuse into a single dome whose
+apex sits only a little above the J point. Acute injury takes off convex or obliquely
+straight; the concave saddle is reserved for early repolarisation and pericarditis,
+which is the discriminator students actually need.
+
 Pathology is expressed by adding, removing, rotating or rescaling those lobes — never
 by drawing a lead by hand. This is the point of the whole design, because it means the
 teaching relationships emerge from the physics instead of being faked:

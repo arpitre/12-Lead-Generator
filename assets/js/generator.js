@@ -96,19 +96,16 @@ window.EKG = window.EKG || {};
         lo.amp * gain, dir, M.SHAPES[lo.shape] || M.SHAPES.bump);
     }
 
-    // Injury current: held across the ST segment, then fading through the T
-    // wave so the tracing lands back on the baseline.
+    /* Injury current. It begins before the QRS finishes, so the terminal limb
+     * lands on an already-elevated J point (see M.stEnvelope). */
     var stMag = Math.sqrt(tpl.stVec[0] * tpl.stVec[0] + tpl.stVec[1] * tpl.stVec[1] + tpl.stVec[2] * tpl.stVec[2]);
     if (stMag > 1e-4) {
       var stDir = L.unit(tpl.stVec);
-      var stShape = M.ST_SHAPES[tpl.stShape] || M.ST_SHAPES.flat;
-      var i0 = Math.round(qrsEnd * fs), iST = Math.round(tStart * fs), i1 = Math.round(tEnd * fs);
-      for (var s = i0; s <= i1 && s < buf.vx.length; s++) {
-        if (s < 0) continue;
-        var env;
-        if (s <= iST) env = stShape(iST > i0 ? (s - i0) / (iST - i0) : 0);
-        else env = stShape(1) * (1 - (s - iST) / Math.max(1, i1 - iST));
-        var v = env * stMag * gain;
+      var sStart = Math.round((qrsEnd - 0.05) * fs);
+      var sEnd = Math.round(tEnd * fs);
+      for (var s = Math.max(0, sStart); s <= sEnd && s < buf.vx.length; s++) {
+        var v = M.stEnvelope(tpl, s / fs, qrsEnd, tStart, tEnd) * stMag * gain;
+        if (v === 0) continue;
         buf.vx[s] += v * stDir[0];
         buf.vy[s] += v * stDir[1];
         buf.vz[s] += v * stDir[2];
@@ -361,19 +358,15 @@ window.EKG = window.EKG || {};
       var stDir = L.unit(tpl.stVec);
       var proj = L.dot(stDir, u);
       var d = leadData[name];
-      var stShape = M.ST_SHAPES[tpl.stShape] || M.ST_SHAPES.flat;
       sched.complexes.forEach(function (c) {
         if (c.kind === 'pvc' || c.kind === 'ventricular' || c.kind === 'paced') return;
         var qrsEnd = c.t + tpl.qrsDur / 1000;
         var tStart = qrsEnd + tpl.stSeg / 1000;
         var tEnd = tStart + tpl.tDur / 1000;
-        var i0 = Math.round(qrsEnd * fs), iST = Math.round(tStart * fs), i1 = Math.round(tEnd * fs);
-        for (var s = i0; s <= i1 && s < n; s++) {
-          if (s < 0) continue;
-          var env = s <= iST
-            ? stShape(iST > i0 ? (s - i0) / (iST - i0) : 0)
-            : stShape(1) * (1 - (s - iST) / Math.max(1, i1 - iST));
-          d[s] += env * stMag * proj * (sg - qg);
+        var sStart = Math.round((qrsEnd - 0.05) * fs);
+        var sEnd = Math.round(tEnd * fs);
+        for (var s = Math.max(0, sStart); s <= sEnd && s < n; s++) {
+          d[s] += M.stEnvelope(tpl, s / fs, qrsEnd, tStart, tEnd) * stMag * proj * (sg - qg);
         }
       });
     });
