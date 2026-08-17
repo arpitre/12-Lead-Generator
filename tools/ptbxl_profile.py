@@ -160,8 +160,10 @@ def main():
     ap.add_argument('-o', '--out', default=os.path.join('assets', 'data', 'ptbxl-profiles.json'))
     ap.add_argument('--fs', type=int, choices=(100, 500), default=500,
                     help='which record set to read (default 500)')
-    ap.add_argument('--limit-per-class', type=int, default=300,
-                    help='max records averaged per diagnosis (default 300)')
+    ap.add_argument('--limit-per-class', type=int, default=150,
+                    help='max records averaged per diagnosis (default 150; '
+                         'medians are stable well before this, so raising it '
+                         'mostly just costs time)')
     ap.add_argument('--min-likelihood', type=int, default=80,
                     help='minimum SCP statement likelihood to accept (default 80)')
     args = ap.parse_args()
