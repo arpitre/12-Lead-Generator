@@ -538,6 +538,13 @@ window.EKG = window.EKG || {};
     t: function (u) { return asym(u, 0.62); },
     tSym: function (u) { return asym(u, 0.5); },
     tPeaked: function (u) { return Math.pow(asym(u, 0.5), 2.2); },
+    /* Sine-wave lobe: a raised cosine blended toward a triangle. A pure
+     * cosine reads as a drawn mathematical sine; real sine-wave hyperkalaemia
+     * has noticeably sharper apices than that. */
+    sineLobe: function (u) {
+      return 0.62 * (0.5 * (1 - Math.cos(2 * Math.PI * u))) +
+             0.38 * (1 - Math.abs(2 * u - 1));
+    },
     /* Wellens Type A. Negative over the first ~60% (vector anterior, so the
      * chest leads go up into a broad rounded hump), then positive over the
      * remainder (vector posterior, giving the shallower terminal inversion).
@@ -1022,7 +1029,8 @@ window.EKG = window.EKG || {};
         tpl.pAmp = 0; tpl.pr = 0;              // atrial muscle is paralysed
         sineMain.t0 = 0;
         sineMain.t1 = Math.min(480, cycle * 0.48);
-        sineMain.amp = 1.00;
+        sineMain.amp = 1.30;
+        sineMain.shape = 'sineLobe';
         sineMain.dir = axisDir(axisAngle(cfg), 0.25);
         tpl.qrsDur = sineMain.t1;
         tpl.stSeg = 0;                          // no ST segment survives
@@ -1035,13 +1043,13 @@ window.EKG = window.EKG || {};
          * different direction, plus a T vector that is broadly opposed rather
          * than exactly mirrored, keeps every lead alive. */
         tpl.lobes.push({
-          t0: sineMain.t1 * 0.35, t1: sineMain.t1, amp: 0.55,
-          dir: axisDir(axisAngle(cfg) + 55, -0.35), shape: 'bump', tag: 'sineLate'
+          t0: sineMain.t1 * 0.35, t1: sineMain.t1, amp: 0.62,
+          dir: axisDir(axisAngle(cfg) + 55, -0.35), shape: 'sineLobe', tag: 'sineLate'
         });
 
         tpl.tDur = Math.min(500, cycle * 0.50);
-        tpl.tAmp = 0.95;
-        tpl.tShape = 'tSym';
+        tpl.tAmp = 1.15;
+        tpl.tShape = 'sineLobe';
         tpl.tDir = unit([
           Math.cos((axisAngle(cfg) + 220) * Math.PI / 180),
           Math.sin((axisAngle(cfg) + 220) * Math.PI / 180),
@@ -2871,7 +2879,7 @@ window.EKG = window.EKG || {};
     // --- metabolic / tox
     P('Hyperkalemia, peaked T waves', 'Metabolic & tox', { rhythm: 'sinus', rate: 76, pattern: 'hyperk_mild' }),
     P('Hyperkalemia, moderate', 'Metabolic & tox', { rhythm: 'sinus', rate: 68, pattern: 'hyperk_moderate' }),
-    P('Hyperkalemia, sine wave', 'Metabolic & tox', { rhythm: 'sinus', rate: 80, pattern: 'hyperk_severe' },
+    P('Hyperkalemia, sine wave', 'Metabolic & tox', { rhythm: 'sinus', rate: 215, pattern: 'hyperk_severe' },
       'Pre-arrest. If the QRS is merging into the T wave, calcium goes in before anything else.'),
     P('Hypokalemia with U waves', 'Metabolic & tox', { rhythm: 'sinus', rate: 78, pattern: 'hypok' }),
     P('Hypocalcemia (long QT)', 'Metabolic & tox', { rhythm: 'sinus', rate: 70, pattern: 'hypocalcemia' }),
