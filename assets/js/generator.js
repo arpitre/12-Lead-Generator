@@ -101,7 +101,8 @@ window.EKG = window.EKG || {};
     var stMag = Math.sqrt(tpl.stVec[0] * tpl.stVec[0] + tpl.stVec[1] * tpl.stVec[1] + tpl.stVec[2] * tpl.stVec[2]);
     if (stMag > 1e-4) {
       var stDir = L.unit(tpl.stVec);
-      var sStart = Math.round((qrsEnd - 0.05) * fs);
+      // From QRS onset: the offset builds as depolarisation sweeps through.
+      var sStart = Math.round((qrsEnd - tpl.qrsDur / 1000 - 0.005) * fs);
       var sEnd = Math.round(tEnd * fs);
       for (var s = Math.max(0, sStart); s <= sEnd && s < buf.vx.length; s++) {
         var v = M.stEnvelope(tpl, s / fs, qrsEnd, tStart, tEnd) * stMag * gain;
@@ -363,7 +364,7 @@ window.EKG = window.EKG || {};
         var qrsEnd = c.t + tpl.qrsDur / 1000;
         var tStart = qrsEnd + tpl.stSeg / 1000;
         var tEnd = tStart + tpl.tDur / 1000;
-        var sStart = Math.round((qrsEnd - 0.05) * fs);
+        var sStart = Math.round((qrsEnd - tpl.qrsDur / 1000 - 0.005) * fs);
         var sEnd = Math.round(tEnd * fs);
         for (var s = Math.max(0, sStart); s <= sEnd && s < n; s++) {
           d[s] += M.stEnvelope(tpl, s / fs, qrsEnd, tStart, tEnd) * stMag * proj * (sg - qg);

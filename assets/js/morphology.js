@@ -74,12 +74,19 @@ window.EKG = window.EKG || {};
    */
   function stEnvelope(tpl, t, qrsEnd, tStart, tEnd) {
     var shape = ST_SHAPES[tpl.stShape] || ST_SHAPES.flat;
-    var ramp = Math.min(0.040, (tpl.qrsDur / 1000) * 0.45);
+
+    /* The offset builds across the WHOLE QRS, not just its tail. Muscle is
+     * converted to the injured potential progressively as depolarisation
+     * sweeps through it, so by the time the R wave is on its way down the
+     * offset is most of the way in -- which is why the descending limb of the
+     * R never reaches the isoelectric line and simply curves into the ST
+     * segment. Ramping only over the last few milliseconds leaves the
+     * terminal QRS forces free to drag the trace back to baseline first, and
+     * that produces the give-away "flat J point with a plateau after it". */
+    var ramp = tpl.qrsDur / 1000;
     var rampStart = qrsEnd - ramp;
 
     if (t < rampStart) return 0;
-
-    // Rising through the tail of the QRS to meet an already-elevated J point.
     if (t < qrsEnd) return shape(0) * smoothstep((t - rampStart) / ramp);
 
     // The ST segment proper.
@@ -415,10 +422,31 @@ window.EKG = window.EKG || {};
       tpl.stVec = add(tpl.stVec, scale(dir, mag));
       tpl.stShape = (cfg.severity === 'marked' || cfg.severity === 'tombstone') ? 'convex' : 'oblique';
       tpl.tDir = unit(add(scale(tpl.tDir, 0.45), scale(dir, 0.85)));
-      tpl.tAmp = 0.18;
+      tpl.tAmp = 0.32;
+
       if (cfg.qWaves) {
         tpl.lobes.unshift({ t0: 0, t1: 40, amp: mag * 1.5, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
       }
+    }
+
+    /* Injured muscle generates little late depolarisation force, which is why
+     * the S wave shrinks or vanishes over an infarcting wall: on a real
+     * inferior STEMI the R wave in II, III and aVF descends part way and
+     * curves straight into the dome, with no S wave at all.
+     *
+     * This is mechanical, not cosmetic. The terminal lobe peaks about 20 ms
+     * before the J point, so leaving it intact drags the trace back down
+     * through the baseline exactly where the ST should be lifting -- which
+     * reinstates the flat J point the ramp exists to prevent.
+     *
+     * Applied at every infarct stage and scaled by severity, so a tombstoning
+     * STEMI loses its terminal forces almost entirely. Deliberately NOT
+     * applied to pericarditis or early repolarisation (handled in
+     * applyPattern): that muscle is alive and keeps its normal S waves. */
+    if (mag > 0 && cfg.ischemia !== 'subendocardial') {
+      tpl.lobes.forEach(function (lo) {
+        if (lo.tag === 'terminal') lo.amp *= 1 / (1 + 12 * mag);
+      });
     }
     return tpl;
   }

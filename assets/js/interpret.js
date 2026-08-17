@@ -20,20 +20,39 @@ window.EKG = window.EKG || {};
   /* Pick a representative beat: the first supraventricular complex that has a
    * full beat's worth of room on either side. */
   /* Pick a beat of whichever type dominates the tracing, with room on either
-   * side so the baseline and T wave are both fully on the page. */
+   * side so the baseline and T wave are both fully on the page.
+   *
+   * The preceding R-R also has to be long enough that the previous beat's T
+   * wave has finished before this beat's baseline window. In atrial
+   * fibrillation with a rapid response the short cycles are shorter than the
+   * QT, so the previous T runs straight into the next complex; measuring
+   * against that produced widespread ST depression with aVR elevation on a
+   * patient whose only problem was a fast, irregular rate. A human reader
+   * does the same thing -- they pick a clean complex to measure. */
   function representativeBeat(result) {
     var cs = result.schedule.complexes;
+    var tpl = result.dominantTemplate || result.template;
     var want = result.dominantKind || 'supraventricular';
     var matches = function (c) {
       if (want === 'ventricular') return c.kind === 'ventricular';
       if (want === 'paced') return c.kind === 'paced';
       return c.kind === 'supraventricular' && !c.ectopic;
     };
+    var inWindow = function (c) { return c.t > 0.8 && c.t < result.duration - 1.0; };
+
+    // Room needed before the QRS for the previous beat's T wave plus baseline.
+    var clearance = (tpl.qrsDur + tpl.stSeg + tpl.tDur) / 1000 + 0.07;
+
+    var best = null, bestGap = -1;
     for (var i = 1; i < cs.length - 1; i++) {
-      if (matches(cs[i]) && cs[i].t > 0.8 && cs[i].t < result.duration - 1.0) return cs[i];
+      if (!inWindow(cs[i])) continue;
+      var gap = cs[i].t - cs[i - 1].t;
+      if (matches(cs[i]) && gap >= clearance) return cs[i];
+      if (matches(cs[i]) && gap > bestGap) { best = cs[i]; bestGap = gap; }
     }
+    if (best) return best;                      // longest available cycle
     for (var j = 1; j < cs.length - 1; j++) {
-      if (cs[j].t > 0.8 && cs[j].t < result.duration - 1.0) return cs[j];
+      if (inWindow(cs[j])) return cs[j];
     }
     return cs.length > 1 ? cs[1] : cs[0];
   }
