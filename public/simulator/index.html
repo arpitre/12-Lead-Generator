@@ -12,7 +12,7 @@
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 40 16" width="40" height="16"><polyline points="0,8 7,8 9,3 12,13 15,8 22,8 24,6 26,10 28,8 40,8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <svg viewBox="0 0 52 18" width="52" height="18"><path d="M0,9 H2 Q4.5,5.6 7.5,9 L9.5,9 L10.3,10.2 L12,1.8 L13.7,13.2 L14.5,9 L16.5,9 Q19.5,3.8 23,9 L28,9 Q30.5,5.6 33.5,9 L35.5,9 L36.3,10.2 L38,1.8 L39.7,13.2 L40.5,9 L42.5,9 Q45.5,3.8 49,9 L52,9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg>
     </span>
     <span>
       <strong>12-Lead Generator</strong>
@@ -32,6 +32,11 @@
     <button id="btnCalipers" class="btn btn-ghost" aria-pressed="false">Calipers: off</button>
     <button id="btnShare" class="btn btn-ghost">Share case</button>
     <button id="btnPrint" class="btn btn-ghost">Print</button>
+  </div>
+
+  <div class="account" id="account" hidden>
+    <span class="account-email" id="accountEmail"></span>
+    <button id="btnSignOut" class="btn btn-sm btn-ghost">Sign out</button>
   </div>
 </header>
 
@@ -84,5 +89,6 @@
 <script src="../assets/js/render.js"></script>
 <script src="../assets/js/calipers.js"></script>
 <script src="../assets/js/app.js"></script>
+<script src="../assets/js/account.js"></script>
 </body>
 </html>
