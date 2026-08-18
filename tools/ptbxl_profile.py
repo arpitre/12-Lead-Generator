@@ -6,7 +6,7 @@ calibrated against real recordings instead of hand-tuned constants.
     pip install wfdb numpy pandas
     python tools/ptbxl_profile.py "D:/ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.3"
 
-Writes assets/data/ptbxl-profiles.json: a few hundred KB of AGGREGATE
+Writes public/assets/data/ptbxl-profiles.json: a few hundred KB of AGGREGATE
 statistics — a median beat and amplitude summary per diagnosis, per lead.
 
 It reads the dataset in place. No patient recording is copied, moved or
@@ -157,7 +157,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('root', help='PTB-XL folder (the one containing ptbxl_database.csv)')
-    ap.add_argument('-o', '--out', default=os.path.join('assets', 'data', 'ptbxl-profiles.json'))
+    ap.add_argument('-o', '--out', default=os.path.join('public', 'assets', 'data', 'ptbxl-profiles.json'))
     ap.add_argument('--fs', type=int, choices=(100, 500), default=500,
                     help='which record set to read (default 500)')
     ap.add_argument('--limit-per-class', type=int, default=150,

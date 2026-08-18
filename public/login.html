@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — 12-Lead Generator</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/css/auth.css">
+</head>
+<body>
+
+<main class="auth">
+  <div class="auth-brand">
+    <span class="mark" aria-hidden="true">
+      <svg viewBox="0 0 40 16" width="40" height="16"><polyline points="0,8 7,8 9,3 12,13 15,8 22,8 24,6 26,10 28,8 40,8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </span>
+    <span>
+      <strong>12-Lead Generator</strong>
+      <small>Paramedic interpretation practice</small>
+    </span>
+  </div>
+
+  <div class="auth-card">
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab" id="tabSignin" role="tab" aria-selected="true" aria-controls="paneSignin">Sign in</button>
+      <button class="auth-tab" id="tabSignup" role="tab" aria-selected="false" aria-controls="paneSignup">Create account</button>
+    </div>
+
+    <p id="message" class="msg" hidden></p>
+
+    <!-- Sign in -->
+    <section id="paneSignin" role="tabpanel" aria-labelledby="tabSignin">
+      <h1>Sign in</h1>
+      <p class="lede">Access to the simulator requires an account.</p>
+      <form id="formSignin" novalidate>
+        <div class="field">
+          <label for="signinEmail">Email address</label>
+          <input id="signinEmail" name="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="signinPassword">Password</label>
+          <input id="signinPassword" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+      </form>
+      <p class="auth-foot"><button type="button" class="btn-link" id="linkForgot">Forgot your password?</button></p>
+    </section>
+
+    <!-- Create account -->
+    <section id="paneSignup" role="tabpanel" aria-labelledby="tabSignup" hidden>
+      <h1>Create an account</h1>
+      <p class="lede">You will need to confirm your email address before you can sign in.</p>
+      <form id="formSignup" novalidate>
+        <div class="field">
+          <label for="signupEmail">Email address</label>
+          <input id="signupEmail" name="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="signupPassword">Password</label>
+          <input id="signupPassword" name="password" type="password" autocomplete="new-password" required>
+          <span class="hint">At least 10 characters. A short phrase beats a short password.</span>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+      </form>
+    </section>
+
+    <!-- Forgot password -->
+    <section id="paneForgot" role="region" aria-label="Reset your password" hidden>
+      <h1>Reset your password</h1>
+      <p class="lede">We will email you a link to set a new one.</p>
+      <form id="formForgot" novalidate>
+        <div class="field">
+          <label for="forgotEmail">Email address</label>
+          <input id="forgotEmail" name="email" type="email" autocomplete="email" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Send reset link</button>
+      </form>
+      <p class="auth-foot"><button type="button" class="btn-link" id="linkBackToSignin">Back to sign in</button></p>
+    </section>
+  </div>
+
+  <p class="auth-note">Simulated tracings for education. Not for clinical use.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var tabSignin = document.getElementById('tabSignin');
+  var tabSignup = document.getElementById('tabSignup');
+  var panes = {
+    signin: document.getElementById('paneSignin'),
+    signup: document.getElementById('paneSignup'),
+    forgot: document.getElementById('paneForgot')
+  };
+  var message = document.getElementById('message');
+  var tabs = document.querySelector('.auth-tabs');
+
+  function show(which) {
+    for (var key in panes) panes[key].hidden = key !== which;
+    // The tab strip offers sign in and sign up; the reset form is a detour off
+    // the sign-in pane rather than a third tab.
+    tabs.hidden = which === 'forgot';
+    tabSignin.setAttribute('aria-selected', String(which === 'signin'));
+    tabSignup.setAttribute('aria-selected', String(which === 'signup'));
+    clearMessage();
+  }
+
+  function clearMessage() {
+    message.hidden = true;
+    message.textContent = '';
+    message.className = 'msg';
+  }
+
+  function say(text, kind) {
+    message.textContent = text;
+    message.className = 'msg msg-' + (kind || 'error');
+    message.hidden = false;
+    message.scrollIntoView({ block: 'nearest' });
+  }
+
+  /* Offered only after a sign-in that failed because the address was never
+   * confirmed — the one case where the fix is another email, not another
+   * password attempt. */
+  function offerResend(email) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-link';
+    button.textContent = 'Send the confirmation email again';
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      post('/api/resend', { email: email }).then(function (result) {
+        if (result.ok) say('Confirmation email sent. Check your inbox.', 'ok');
+        else say(result.body.error || 'Could not send that email.', 'error');
+      });
+    });
+    message.appendChild(document.createElement('br'));
+    message.appendChild(button);
+  }
+
+  function post(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        return { ok: response.ok, status: response.status, body: data || {} };
+      });
+    }).catch(function () {
+      return { ok: false, status: 0, body: { error: 'Network error. Check your connection and try again.' } };
+    });
+  }
+
+  function submitting(form, busy, label) {
+    var button = form.querySelector('button[type="submit"]');
+    button.disabled = busy;
+    if (busy) {
+      button.dataset.label = button.textContent;
+      button.textContent = label;
+    } else if (button.dataset.label) {
+      button.textContent = button.dataset.label;
+    }
+  }
+
+  tabSignin.addEventListener('click', function () { show('signin'); });
+  tabSignup.addEventListener('click', function () { show('signup'); });
+  document.getElementById('linkForgot').addEventListener('click', function () {
+    document.getElementById('forgotEmail').value = document.getElementById('signinEmail').value;
+    show('forgot');
+  });
+  document.getElementById('linkBackToSignin').addEventListener('click', function () { show('signin'); });
+
+  /* Where to send somebody once they are through.
+   *
+   * Only ever a path on this site, so a crafted ?next= cannot turn the login
+   * page into an open redirect. It must begin with a single slash followed by
+   * an ordinary path character — a backslash has to be excluded too, because
+   * the URL parser rewrites "/\evil.com" into "//evil.com", which is a
+   * different origin.
+   *
+   * The fragment is carried across by hand. A shared case link is
+   * `/simulator/#c=...`, and the fragment never reaches the server, so the
+   * gate could not have put it in ?next=. The browser does preserve it across
+   * the redirect to this page, which is the only copy of it that survives —
+   * so read it off our own URL and reattach it, or signing in would silently
+   * swallow the case somebody was sent.
+   */
+  function destination(next) {
+    var path = (next && /^\/[^/\\]/.test(next)) ? next : '/simulator/';
+    if (path.indexOf('#') === -1 && location.hash) path += location.hash;
+    return path;
+  }
+
+  document.getElementById('formSignin').addEventListener('submit', function (event) {
+    event.preventDefault();
+    clearMessage();
+    var form = event.target;
+    var email = document.getElementById('signinEmail').value.trim();
+    var password = document.getElementById('signinPassword').value;
+
+    submitting(form, true, 'Signing in…');
+    post('/api/login', { email: email, password: password }).then(function (result) {
+      submitting(form, false);
+      if (result.ok) {
+        /* Only ever follow a path on this site, so a crafted ?next= cannot
+         * turn the login page into an open redirect. It must begin with a
+         * single slash followed by an ordinary path character — note that a
+         * backslash has to be excluded too, because the URL parser rewrites
+         * "/\evil.com" into "//evil.com", which is a different origin. */
+        var next = new URLSearchParams(location.search).get('next');
+        location.href = destination(next);
+        return;
+      }
+      say(result.body.error || 'Could not sign you in.', 'error');
+      if (result.body.needsVerification) offerResend(email);
+    });
+  });
+
+  document.getElementById('formSignup').addEventListener('submit', function (event) {
+    event.preventDefault();
+    clearMessage();
+    var form = event.target;
+    var email = document.getElementById('signupEmail').value.trim();
+    var password = document.getElementById('signupPassword').value;
+
+    submitting(form, true, 'Creating account…');
+    post('/api/signup', { email: email, password: password }).then(function (result) {
+      submitting(form, false);
+      if (!result.ok) {
+        say(result.body.error || 'Could not create that account.', 'error');
+        return;
+      }
+      if (result.body.verify === false) {
+        location.href = destination(new URLSearchParams(location.search).get('next'));
+        return;
+      }
+      show('signin');
+      document.getElementById('signinEmail').value = email;
+      say('Check ' + email + ' for a confirmation link, then sign in. It can take a minute, and it may land in spam.', 'ok');
+    });
+  });
+
+  document.getElementById('formForgot').addEventListener('submit', function (event) {
+    event.preventDefault();
+    clearMessage();
+    var form = event.target;
+    var email = document.getElementById('forgotEmail').value.trim();
+
+    submitting(form, true, 'Sending…');
+    post('/api/recover', { email: email }).then(function (result) {
+      submitting(form, false);
+      if (!result.ok) {
+        say(result.body.error || 'Could not send that email.', 'error');
+        return;
+      }
+      show('signin');
+      say('If an account exists for ' + email + ', a reset link is on its way.', 'ok');
+    });
+  });
+
+  // Messages handed over by a redirect: an expired link, or a confirmed address.
+  var params = new URLSearchParams(location.search);
+  if (params.get('error')) say(params.get('error'), 'error');
+  else if (params.get('confirmed')) say('Your email address is confirmed. Sign in below.', 'ok');
+  else if (params.get('reset')) say('Password updated. Sign in with your new password.', 'ok');
+  else if (params.get('next')) say('Sign in to reach that page.', 'ok');
+})();
+</script>
+</body>
+</html>
