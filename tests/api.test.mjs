@@ -5,6 +5,7 @@ import { onRequestPost as recover } from '../functions/api/recover.js';
 import { onRequestPost as reset } from '../functions/api/reset.js';
 import { onRequestGet as confirm } from '../functions/auth/confirm.js';
 import { verify } from '../lib/session.js';
+import { gotrue } from '../lib/supabase.js';
 
 const SECRET = 'test-secret-value-0123456789';
 const env = {
@@ -20,7 +21,7 @@ let seen = [];
 
 function stub(status, body) {
   globalThis.fetch = async (url, init) => {
-    seen.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null });
+    seen.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null, headers: init.headers || {} });
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   };
 }
@@ -121,5 +122,31 @@ res = await login({ request: new Request('https://ekg.test/x', { method: 'POST',
 assert.strictEqual(res.status, 500);
 assert.match((await res.json()).error, /missing its configuration/);
 ok('a server missing its keys says so instead of failing as a bad password');
+
+
+// --- the two generations of Supabase project key ----------------------
+// The legacy `anon` key is a JWT; the current publishable key is not. GoTrue
+// parses the Authorization bearer as a JWT when one is present, so sending the
+// publishable key there earns a 401 that reads exactly like a wrong password.
+const LEGACY_ANON = 'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.c2lnbmF0dXJl';
+const PUBLISHABLE = 'sb_publishable_k8ym3XZwwPLYnlJkqVvelw';
+
+stub(200, {});
+seen = [];
+await gotrue({ url: 'https://proj.supabase.co', anonKey: PUBLISHABLE }, '/token', { body: {} });
+assert.strictEqual(seen[0].headers.apikey, PUBLISHABLE, 'the project key must always be sent as apikey');
+assert.ok(!seen[0].headers.authorization, 'a publishable key must not be sent as a bearer token');
+ok('a publishable key identifies the project without posing as a JWT');
+
+seen = [];
+await gotrue({ url: 'https://proj.supabase.co', anonKey: LEGACY_ANON }, '/token', { body: {} });
+assert.strictEqual(seen[0].headers.authorization, 'Bearer ' + LEGACY_ANON);
+ok('a legacy anon key is still sent as the bearer, as GoTrue expects');
+
+seen = [];
+await gotrue({ url: 'https://proj.supabase.co', anonKey: PUBLISHABLE }, '/user', { token: 'user-access-token' });
+assert.strictEqual(seen[0].headers.authorization, 'Bearer user-access-token');
+assert.strictEqual(seen[0].headers.apikey, PUBLISHABLE);
+ok("a real user token always wins the bearer, whichever key format is configured");
 
 console.log('\n' + pass + ' API checks passed');

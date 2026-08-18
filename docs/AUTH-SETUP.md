@@ -34,12 +34,21 @@ that. The gate stops non-customers from getting in; it is not copy protection.
 
 1. At [supabase.com](https://supabase.com), create a project. Any region near
    your students is fine.
-2. Go to **Project Settings → API** and copy two values:
-   - **Project URL** — looks like `https://abcdefgh.supabase.co`
-   - **anon public** key — a long string
+2. **Project URL.** Supabase moved this out of the API screen; it is under
+   **Project Settings → Data API**, or you can read it off the dashboard
+   address bar — the project reference is in the URL, and the value you want is
+   `https://<project-ref>.supabase.co`.
+3. **Project key.** **Project Settings → API Keys**. Take the **publishable**
+   key (`sb_publishable_...`) from the *Publishable and secret API keys* tab.
+   The legacy `anon` key on the other tab also works and is what older setups
+   use.
 
-Both go into Cloudflare in step 4. The anon key is only ever used server-side
-here, so it never appears in the page.
+   Do **not** use a **secret** key (`sb_secret_...`) or the legacy
+   `service_role` key. Those bypass row-level security and can administer the
+   project; nothing here needs that, and a mistake with one is unrecoverable.
+
+Both go into Cloudflare in step 4. The project key is only ever used
+server-side here, so it never appears in the page.
 
 ## 2. Turn on email confirmation
 
@@ -96,9 +105,9 @@ names your programme more than a default one.
    | Name | Value |
    |---|---|
    | `SUPABASE_URL` | the Project URL from step 1 |
-   | `SUPABASE_ANON_KEY` | the anon public key from step 1 |
+   | `SUPABASE_ANON_KEY` | the publishable (or legacy anon) key from step 1 |
    | `SESSION_SECRET` | a long random string — see below |
-   | `SITE_URL` | `https://ekg.yourdomain.com` |
+   | `SITE_URL` | `https://ekg.yourdomain.com` — optional; defaults to the origin the request arrived on, so it can be left out until a custom domain is attached |
 
    Generate the secret with:
 
