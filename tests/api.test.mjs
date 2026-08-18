@@ -124,6 +124,28 @@ assert.match((await res.json()).error, /missing its configuration/);
 ok('a server missing its keys says so instead of failing as a bad password');
 
 
+// --- what a misconfigured deployment reports --------------------------
+// "absent" and "blank" are the only two things a running deployment can tell
+// apart about a setting it did not get, and they have different fixes: a
+// binding that never arrived versus a value saved empty.
+{
+  const { config, configError } = await import('../lib/supabase.js');
+  const base = { SUPABASE_URL: 'https://p.supabase.co', SUPABASE_ANON_KEY: 'sb_publishable_x' };
+
+  assert.match(configError(config({ ...base })), /SESSION_SECRET \(not set\)/);
+  assert.match(configError(config({ ...base, SESSION_SECRET: '' })), /SESSION_SECRET \(set, but empty\)/);
+  assert.match(configError(config({ ...base, SESSION_SECRET: '   ' })), /SESSION_SECRET \(set, but empty\)/);
+  assert.strictEqual(configError(config({ ...base, SESSION_SECRET: 'a-real-long-secret' })), null);
+  ok('a missing setting says whether it is unset or merely empty');
+
+  // A pasted value routinely carries a newline. Letting that into the signing
+  // key would work, but nobody could ever reproduce the key from the value
+  // they think they set.
+  assert.strictEqual(config({ ...base, SESSION_SECRET: ' secret-with-space \n' }).secret, 'secret-with-space');
+  assert.strictEqual(config({ ...base, SUPABASE_URL: ' https://p.supabase.co/ ' }).url, 'https://p.supabase.co');
+  ok('whitespace around a pasted value is trimmed off, key and URL alike');
+}
+
 // --- the two generations of Supabase project key ----------------------
 // The legacy `anon` key is a JWT; the current publishable key is not. GoTrue
 // parses the Authorization bearer as a JWT when one is present, so sending the
