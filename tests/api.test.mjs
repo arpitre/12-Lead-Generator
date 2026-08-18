@@ -144,6 +144,18 @@ ok('a server missing its keys says so instead of failing as a bad password');
   assert.strictEqual(config({ ...base, SESSION_SECRET: ' secret-with-space \n' }).secret, 'secret-with-space');
   assert.strictEqual(config({ ...base, SUPABASE_URL: ' https://p.supabase.co/ ' }).url, 'https://p.supabase.co');
   ok('whitespace around a pasted value is trimmed off, key and URL alike');
+
+  /* The dashboard shows the REST endpoint on the screen people go to for "the
+   * project URL", so that is what gets pasted. Appending /auth/v1 to it 404s,
+   * and the 404 arrives looking like a rejected password. */
+  for (const pasted of ['https://p.supabase.co/rest/v1/', 'https://p.supabase.co/rest/v1',
+                        'https://p.supabase.co/auth/v1', 'https://p.supabase.co/storage/v1/']) {
+    assert.strictEqual(config({ ...base, SUPABASE_URL: pasted }).url, 'https://p.supabase.co', pasted);
+  }
+  // But a real path is a real path: a self-hosted instance may live under one.
+  assert.strictEqual(config({ ...base, SUPABASE_URL: 'https://self.hosted/supabase' }).url,
+                     'https://self.hosted/supabase');
+  ok('a pasted REST or auth endpoint is reduced to the project URL, without eating real paths');
 }
 
 // --- the two generations of Supabase project key ----------------------

@@ -38,6 +38,11 @@ that. The gate stops non-customers from getting in; it is not copy protection.
    **Project Settings → Data API**, or you can read it off the dashboard
    address bar — the project reference is in the URL, and the value you want is
    `https://<project-ref>.supabase.co`.
+
+   That screen displays the **REST** endpoint, ending `/rest/v1/`. The value
+   wanted here is the bare project URL with no path. Pasting the REST endpoint
+   is handled — the trailing service prefix is trimmed off — but it is worth
+   knowing which one you are looking at.
 3. **Project key.** **Project Settings → API Keys**. Take the **publishable**
    key (`sb_publishable_...`) from the *Publishable and secret API keys* tab.
    The legacy `anon` key on the other tab also works and is what older setups
