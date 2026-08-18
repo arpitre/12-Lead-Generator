@@ -5,25 +5,36 @@ tracing from dropdowns (or pick a preset case), hand it to a student in **blind 
 so nothing gives the answer away, then reveal a step-by-step explanation of *why* the
 interpretation is what it is — anatomically and electrically.
 
-No build step, no dependencies, no backend. Open `index.html` and it runs.
+The simulator itself has no build step and no dependencies. Access to it requires an
+account.
 
 ---
 
 ## Running it
 
-**Hosted (recommended for a class):** publish the repository with GitHub Pages
-(Settings → Pages → deploy from branch, root folder). Students then just need the URL.
+**Hosted, with accounts (recommended for a class):** deploy to Cloudflare Pages with
+Supabase handling the accounts. Students sign up, confirm their email address, and sign
+in; nothing under `public/` is served to anyone who has not. Full walkthrough in
+[`docs/AUTH-SETUP.md`](docs/AUTH-SETUP.md) — about half an hour, on free tiers.
 
-**Local:** clone the repository and open `index.html` in any modern browser. It works
+> GitHub Pages cannot host the gated version. It serves static files and runs no code,
+> so it has no way to check for a session before handing over `assets/js/explain.js`.
+> A login written in front-end JavaScript would be decoration, not a gate.
+
+**Local, no accounts:** open `public/index.html` in any modern browser. It works
 straight off the filesystem — no server required — so a preceptor can carry the folder
-on a USB stick.
+on a USB stick. The account strip stays hidden, since there is no server to ask.
 
-**Local with a server** (only needed if you want clean share links):
+**Local with the gate running,** to work on the auth layer:
 
 ```bash
-python3 -m http.server 8000
-# then open http://localhost:8000
+npm install -g wrangler
+wrangler pages dev public          # needs the environment variables from docs/AUTH-SETUP.md
 ```
+
+**Single file:** `node build-standalone.js` bundles everything into
+`12-lead-generator.html` for offline teaching. That file has no gate — it is the whole
+simulator in one document — so keep it off any public URL once you are charging.
 
 ---
 
@@ -142,7 +153,7 @@ electrodes very differently from a compact His-Purkinje dipole.
 
 ### Calibrating against real recordings (PTB-XL)
 
-The constants in `leads.js` and `morphology.js` were tuned by eye against published
+The constants in `public/assets/js/leads.js` and `morphology.js` were tuned by eye against published
 morphology. `tools/ptbxl_profile.py` replaces that with measurements taken from real
 clinical ECGs.
 
@@ -184,19 +195,26 @@ visible instead of hidden.
 ## Project layout
 
 ```
-index.html
-assets/css/app.css
-assets/js/
-  leads.js        lead geometry and per-lead gains
-  morphology.js   beat templates; all pathology modifiers
-  rhythm.js       beat scheduling: rhythms, blocks, ectopy, pacing
-  generator.js    assembles the signal and projects it onto the leads
-  interpret.js    measurements off the signal + machine-style statements
-  catalog.js      the dropdown schema and the preset case library
-  explain.js      the step-by-step teaching walkthrough
-  render.js       SVG renderer (ECG paper, 4x3 + rhythm strip, header)
-  calipers.js     drag-to-measure
-  app.js          UI wiring, blind mode, sharing, printing
+public/
+  index.html      the simulator (behind the gate)
+  login.html      sign in, create account, request a password reset
+  reset.html      set a new password
+  assets/css/app.css
+  assets/js/
+    leads.js        lead geometry and per-lead gains
+    morphology.js   beat templates; all pathology modifiers
+    rhythm.js       beat scheduling: rhythms, blocks, ectopy, pacing
+    generator.js    assembles the signal and projects it onto the leads
+    interpret.js    measurements off the signal + machine-style statements
+    catalog.js      the dropdown schema and the preset case library
+    explain.js      the step-by-step teaching walkthrough
+    render.js       SVG renderer (ECG paper, 4x3 + rhythm strip, header)
+    calipers.js     drag-to-measure
+    app.js          UI wiring, blind mode, sharing, printing
+    account.js      the signed-in header strip
+functions/        the auth layer — see docs/AUTH-SETUP.md
+lib/              session signing, Supabase client, helpers
+tests/            npm test
 ```
 
 The SVG is drawn in **millimetre units**, so 25 mm/s and 10 mm/mV are literally 25 and
@@ -204,6 +222,8 @@ The SVG is drawn in **millimetre units**, so 25 mm/s and 10 mm/mV are literally 
 time and voltage with no scaling fudge factor.
 
 ### Adding a finding
+All four files live in `public/assets/js/`.
+
 1. Add the physiology to `morphology.js` (a lobe, a vector rotation, or an overlay).
 2. Add the option to the relevant field in `catalog.js`.
 3. Add a machine statement in `interpret.js` and teaching text in `explain.js`.

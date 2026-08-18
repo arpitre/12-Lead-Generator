@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /* build-standalone.js — bundle the app into one self-contained HTML file.
  *
+ * Reads from public/, which is what Cloudflare Pages deploys. Note that the
+ * result is NOT gated: it is the entire simulator in one file, so treat it as
+ * an internal artifact and do not publish it anywhere the login is meant to
+ * protect.
+ *
  *   node build-standalone.js
  *
  * Produces `12-lead-generator.html`: no external CSS or JS, no server, no
@@ -9,13 +14,15 @@
  *
  * Re-run this after changing anything in assets/.
  */
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = __dirname;
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const SRC = path.join(ROOT, 'public');
 const OUT = path.join(ROOT, '12-lead-generator.html');
 
-const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
+const read = p => fs.readFileSync(path.join(SRC, p), 'utf8');
 
 // Load order matters: each file registers itself on the shared EKG namespace.
 const SCRIPTS = [
@@ -29,6 +36,9 @@ const SCRIPTS = [
   'assets/js/render.js',
   'assets/js/calipers.js',
   'assets/js/app.js'
+  // assets/js/account.js is deliberately absent — it calls the auth API, which
+  // no offline copy has. Its markup ships hidden, so leaving it out yields a
+  // build with no account strip rather than a broken one.
 ];
 
 const html = read('index.html');

@@ -86,6 +86,11 @@ body {
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .tb-sep { width: 1px; height: 22px; background: var(--line); }
 
+/* Signed-in account strip. Hidden until account.js confirms a session, and
+ * absent entirely from the offline standalone build. */
+.account { display: flex; align-items: center; gap: 8px; }
+.account-email { color: var(--ink-3); font-size: 12px; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .btn {
   font: inherit;
   font-size: 13px;
@@ -289,7 +294,7 @@ body.is-blind #btnGenerate { display: none; }
 @media print {
   @page { size: landscape; margin: 8mm; }
   body { background: #fff; }
-  .topbar, .panel, .sharebox, .caliper-readout, #btnPanel { display: none !important; }
+  .topbar, .panel, .sharebox, .caliper-readout, #btnPanel, .account { display: none !important; }
   .content { padding: 0; }
   .layout { display: block; }
   .tracing { border: none; box-shadow: none; overflow: visible; }
@@ -335,6 +340,11 @@ body.is-blind #btnGenerate { display: none; }
     <button id="btnCalipers" class="btn btn-ghost" aria-pressed="false">Calipers: off</button>
     <button id="btnShare" class="btn btn-ghost">Share case</button>
     <button id="btnPrint" class="btn btn-ghost">Print</button>
+  </div>
+
+  <div class="account" id="account" hidden>
+    <span class="account-email" id="accountEmail"></span>
+    <button id="btnSignOut" class="btn btn-sm btn-ghost">Sign out</button>
   </div>
 </header>
 
