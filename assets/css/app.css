@@ -301,3 +301,7 @@ body.is-blind #btnGenerate { display: none; }
   .brand small { display: none; }
   .content { padding: 12px; }
 }
+
+/* Treatment steps inside the explanation. */
+.exp-list { margin: 0.2rem 0 0.7rem; padding-left: 1.25rem; }
+.exp-list li { margin: 0.32rem 0; line-height: 1.5; }

@@ -60,7 +60,8 @@ After revealing, the walkthrough follows the order a student should read every 1
 6. **ST segments & T waves** — measured deviations, contiguity, reciprocal change
 7. **Anatomy & vessel** — which wall, which artery, which complications to expect
 8. **Mimics** — the look-alikes and how to exclude them
-9. **What it means in the field** — prehospital implications
+9. **Treatment & field management** — condition-specific prehospital steps with adult drug
+   doses, plus the definitive hospital care (AHA ACLS / ACC-AHA ACS based)
 
 Sections that relate to particular leads have a **Highlight on the tracing** button.
 
@@ -91,7 +92,8 @@ A heartbeat is assembled from a few vector lobes:
 | Lobe | Direction | What it produces |
 |---|---|---|
 | Septal | rightward, anterior | small q in I/aVL/V5/V6, small r in V1 |
-| Main free wall | leftward, inferior, posterior | the dominant R wave; carries the axis |
+| Early free wall | leftward, inferior, slightly anterior | the R wave in V3-V6 and the limb leads |
+| Late free wall | leftward, inferior, posterior | the S wave in V1-V3; with the early lobe, carries the axis |
 | Terminal basal | rightward, superior | small s in I and V6 |
 | T wave | roughly concordant with the main lobe | normal upright T |
 | Injury (ST) | outward through the ischaemic wall | ST elevation and depression |
@@ -115,6 +117,18 @@ does not:
 - **Acute injury takes off convex or obliquely straight.** The concave saddle is
   reserved for early repolarisation and pericarditis, which is the discriminator
   students actually need.
+
+The free wall is two lobes rather than one because ventricular depolarisation is a loop,
+not a line: it starts apical and anterior and finishes basal and posterior. That rotation
+is what gives the transition lead (V3) a real RS complex and makes R-wave progression
+across the chest emerge from geometry.
+
+**Infarct scar is modelled as missing muscle.** A pathological Q wave is not an extra
+deflection added in front of a normal QRS; it is what a lead records when the wall beneath
+it stops contributing. So a scar both adds an early vector pointing away from the dead wall
+*and* removes the forces that used to point toward it — which is why an old anterior
+infarct shows QS complexes in V1-V3 with the R wave only recovering by V4-V5, rather than
+a small q in front of a full-height R.
 
 Pathology is expressed by adding, removing, rotating or rescaling those lobes — never
 by drawing a lead by hand. This is the point of the whole design, because it means the
@@ -197,6 +211,7 @@ assets/js/
   generator.js    assembles the signal and projects it onto the leads
   interpret.js    measurements off the signal + machine-style statements
   catalog.js      the dropdown schema and the preset case library
+  treatment.js    management for every rhythm and pattern: field steps, doses, definitive care
   explain.js      the step-by-step teaching walkthrough
   render.js       SVG renderer (ECG paper, 4x3 + rhythm strip, header)
   calipers.js     drag-to-measure

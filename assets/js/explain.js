@@ -104,6 +104,8 @@ window.EKG = window.EKG || {};
         ? 'no visible P waves at all — they are buried inside the QRS because the atria and ventricles are being depolarised at the same moment.'
         : 'inverted P waves ' + (cfg.retrogradeP === 'after' ? 'immediately after' : 'immediately before') +
           ' each QRS. The impulse is starting at the AV junction and travelling *backwards* into the atria, so the atrial depolarisation vector points up and to the right instead of down and to the left — which is exactly why the P wave is upside down in II, III and aVF.'));
+    } else if (cfg.rhythm === 'svt') {
+      body.push('**Atrial activity:** no P wave in front of the QRS. In the commonest SVT (AV nodal re-entry) the atria and ventricles are activated almost simultaneously, so the P wave is retrograde and lands in the tail of the QRS. Look closely at the end of the QRS in II, III and aVF for a small extra negative nick (a "pseudo-S" wave) and in V1 for a small extra positive one (a "pseudo-r prime") - neither is there in the same patient\'s sinus rhythm.');
     } else if (EKG.rhythm.isVentricular(cfg.rhythm)) {
       if (cfg.avDissociation) {
         body.push('**Atrial activity:** look carefully and there are sinus P waves marching through the tachycardia at their own independent rate, completely unrelated to the QRS complexes. That is AV dissociation, and it is the single most reliable sign that a wide complex tachycardia is ventricular in origin. The sinus node has not noticed the VT and is still doing its job.');
@@ -331,6 +333,13 @@ window.EKG = window.EKG || {};
     };
     if (artifactText[cfg.artifact]) body.push(artifactText[cfg.artifact]);
 
+    var terrQ = EKG.morphology.TERRITORIES[cfg.ischemia];
+    if (terrQ && cfg.ischemia !== 'subendocardial' && cfg.ischemia !== 'posterior' &&
+        (cfg.stage === 'old' || cfg.stage === 'evolving' || (cfg.stage === 'acute' && cfg.qWaves))) {
+      headline.push('pathologic Q waves');
+      body.push('**Pathologic Q waves and lost R waves.** Look at the leads over the ' + terrQ.wall + ' (' + terrQ.leads + '): the QRS there starts with a wide, deep negative deflection, and the R wave that should follow is small or absent. Compare them with the same leads on a normal tracing - the R wave has not just gained a Q in front of it, it has lost height. Both changes say the same thing: the muscle under those electrodes is no longer generating a signal.');
+    }
+
     if (!body.length) {
       body.push('QRS morphology is unremarkable: a narrow QRS with normal septal q waves in the lateral leads, and R waves that grow progressively across the precordium as the electrodes move over the left ventricle. The transition — the lead where the R and S are about equal — normally sits at V3 or V4.');
       headline.push('normal QRS morphology');
@@ -425,7 +434,7 @@ window.EKG = window.EKG || {};
       body.push('**Hyperacute T waves.** In the first minutes of occlusion, before the ST segment lifts, the T waves over the affected wall become tall, broad-based and fat — bigger than the QRS in some leads. They are easy to dismiss as normal or as hyperkalaemia. The distinction is that hyperkalaemic T waves are narrow and pointed with a tight base, while hyperacute T waves are broad and bulky, and they are confined to a coronary territory rather than being global.');
     }
     if (cfg.stage === 'evolving' || cfg.stage === 'old') {
-      body.push('**Q waves.** A pathologic Q wave is over 40 ms wide or deeper than a quarter of the following R wave. It means dead, electrically silent muscle: an electrode over infarcted tissue is effectively looking through a hole in the wall and recording the depolarisation of the opposite wall moving away from it. Q waves take hours to develop and usually persist for life, so they mark territory already lost.');
+      body.push('**Q waves.** A pathologic Q wave is 40 ms (one small square) or more wide, or deeper than a quarter of the R wave that follows it - and any Q wave at all in V1-V3 is abnormal. It means dead, electrically silent muscle: an electrode over infarcted tissue is effectively looking through a hole in the wall and recording the depolarisation of the opposite wall moving away from it. That is also why the R wave over the scar is small or missing altogether - the muscle that used to write it is gone. A QS complex (all negative, no R wave) is the extreme case. Q waves take hours to develop and usually persist for life, so they mark territory already lost.');
     }
 
     if (cfg.ivcd === 'lbbb' && terr) {
@@ -502,53 +511,32 @@ window.EKG = window.EKG || {};
     return section('anatomy', 'Anatomy & vessel', terr.label + ' — ' + terr.artery, body);
   }
 
-  /* ------------------------------------------------------ field notes */
+  /* ------------------------------------------------- treatment notes */
 
+  /* Management, specific to what is on the page. The content lives in
+   * treatment.js -- one entry per rhythm, block, infarct pattern and
+   * metabolic pattern -- and this just lays the applicable entries out,
+   * most time-critical first. Lines starting "- " render as a list. */
   function fieldSection(r, interp) {
-    var cfg = r.config, m = r.measurements, body = [];
-    var terr = EKG.morphology.TERRITORIES[cfg.ischemia];
+    var cfg = r.config, body = [];
+    var entries = EKG.treatment.build(r);
+
+    body.push('**' + EKG.treatment.BASIS + '** Your own protocols and medical direction take precedence wherever they differ; doses are for adults.');
 
     if (interp.alert) {
-      body.push('This tracing meets STEMI criteria. Transmit it, activate early, and keep scene time short — the clock that matters is first medical contact to balloon.');
-      body.push('Repeat the 12-lead: serial tracings catch evolution, catch reperfusion, and catch the infarct that was not there on the first one.');
+      body.push('This tracing meets criteria for an acute coronary occlusion. Transmit it, activate early, and keep scene time short.');
     }
 
-    if (cfg.ischemia === 'inferior' || cfg.ischemia === 'inferior_rv' || cfg.ischemia === 'inferoposterior') {
-      body.push('Acquire V4R before giving nitroglycerin. If the right ventricle is involved and the patient is preload dependent, nitro can drop them.');
-      body.push('Expect bradycardia and AV block. Have pacing pads on the patient, not in the bag.');
-    }
-    if (cfg.ischemia === 'extensive_anterior' || cfg.ischemia === 'anteroseptal' || cfg.ischemia === 'anterior') {
-      body.push('Watch for pump failure rather than bradycardia. Listen to the lungs, watch the pressure, and be cautious with fluid.');
-    }
-    if (cfg.ischemia === 'posterior' || cfg.ischemia === 'inferolateral') {
-      body.push('Get posterior leads (V7-V9). A posterior infarct is a STEMI that qualifies for reperfusion — but only if somebody looks for it.');
-    }
-
-    if (m.hr < 50 && !cfg.pacing) {
-      body.push('Symptomatic bradycardia: assess perfusion first. Atropine works at the AV node, so it is most likely to help a narrow-complex block in an inferior MI and least likely to help an infra-nodal block with a wide escape rhythm. If it is not working, move to pacing or chronotropic infusions rather than repeating atropine.');
-    }
-    if (cfg.avblock === 'mobitz2' || cfg.avblock === 'third') {
-      body.push('This block is below the AV node or complete. Atropine is unlikely to help and can occasionally worsen it by speeding the atria without improving conduction. Prepare for transcutaneous pacing.');
-    }
-    if (cfg.rhythm === 'vtach' || cfg.rhythm === 'polymorphic_vt') {
-      body.push('Assess perfusion immediately. Unstable wide complex tachycardia gets synchronised cardioversion (or unsynchronised defibrillation if polymorphic, because the monitor cannot reliably sync to it). Stable VT buys you time for antiarrhythmics.');
-    }
-    if (cfg.pattern === 'hyperk_severe' || cfg.pattern === 'hyperk_moderate') {
-      body.push('Calcium first — it stabilises the myocardial membrane within minutes and does not lower the potassium. Then shift it (beta agonists, bicarbonate, insulin and glucose per your protocol). Ask about dialysis, crush injury, and renal failure.');
-    }
-    if (cfg.pattern === 'tca') {
-      body.push('Sodium bicarbonate for a QRS over 100 ms. Avoid class I antiarrhythmics — they block the same channel the poison does.');
-    }
-    if (cfg.artifact && cfg.artifact !== 'none') {
-      body.push('Before treating anything on this tracing, fix the acquisition. A 12-lead you cannot trust is worse than no 12-lead, because it invites a decision built on an artifact.');
-    }
-    if (cfg.ischemia === 'wellens_a' || cfg.ischemia === 'wellens_b') {
-      body.push('The patient is pain-free and looks well. Resist the urge to downgrade them — this pattern predicts anterior infarction within days. Transport to a PCI-capable facility and hand over the pattern by name.');
-    }
+    entries.forEach(function (e) {
+      body.push('**' + e.title + '**');
+      e.field.forEach(function (step) { body.push('- ' + step); });
+      if (e.hospital) body.push('*Definitive care:* ' + e.hospital);
+    });
 
     body.push('Whatever the tracing shows, treat the patient in front of you. The 12-lead is one piece of information alongside the story, the vital signs and the way they look.');
 
-    return section('field', 'What it means in the field', 'Prehospital implications', body);
+    var headline = entries.length ? entries.map(function (e) { return e.title; }).slice(0, 2).join(' + ') : 'Prehospital management';
+    return section('field', 'Treatment & field management', headline, body);
   }
 
   /* --------------------------------------------------------- mimics */
@@ -567,7 +555,7 @@ window.EKG = window.EKG || {};
       body.push('Before you commit to acute coronary occlusion, run the mimics:');
       mimics.forEach(function (mm2) { body.push(mm2); });
       body.push('The two questions that resolve most of these: does the ST deviation respect a coronary territory, and is there reciprocal change somewhere? A blocked artery affects one wall and produces a mirror somewhere else. Most mimics do neither.');
-    } else if (cfg.pattern === 'lvh_strain' || cfg.pattern === 'pericarditis' || cfg.pattern === 'early_repol') {
+    } else if (cfg.chambers === 'lvh_strain' || cfg.pattern === 'pericarditis' || cfg.pattern === 'early_repol' || cfg.pattern === 'brugada') {
       body.push('This is a STEMI mimic. Be able to say out loud why it is not an infarct — that reasoning is what stops an unnecessary cath lab activation, and more importantly, what stops you from dismissing the real thing later.');
     } else {
       return null;

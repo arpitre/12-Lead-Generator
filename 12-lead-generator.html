@@ -310,13 +310,17 @@ body.is-blind #btnGenerate { display: none; }
   .content { padding: 12px; }
 }
 
+/* Treatment steps inside the explanation. */
+.exp-list { margin: 0.2rem 0 0.7rem; padding-left: 1.25rem; }
+.exp-list li { margin: 0.32rem 0; line-height: 1.5; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 52 18" width="52" height="18"><path d="M0,9 H2 Q4.5,5.6 7.5,9 L9.5,9 L10.3,10.2 L12,1.8 L13.7,13.2 L14.5,9 L16.5,9 Q19.5,3.8 23,9 L28,9 Q30.5,5.6 33.5,9 L35.5,9 L36.3,10.2 L38,1.8 L39.7,13.2 L40.5,9 L42.5,9 Q45.5,3.8 49,9 L52,9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      <svg viewBox="0 0 40 16" width="40" height="16"><polyline points="0,8 7,8 9,3 12,13 15,8 22,8 24,6 26,10 28,8 40,8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
     </span>
     <span>
       <strong>12-Lead Generator</strong>
@@ -403,6 +407,23 @@ window.EKG = window.EKG || {};
   // rotating toward anterior.
   function transverse(deg) { return [Math.cos(deg * D), 0, -Math.sin(deg * D)]; }
 
+  /* Chest electrode: a transverse angle plus a downward tilt.
+   *
+   * V3-V6 sit in the fifth intercostal space, below the electrical centre of
+   * the heart, so their lead axes point a little toward the feet as well as
+   * round the chest. Leaving that out makes V6 an exact copy of lead I -- any
+   * rightward axis then wipes the R waves out of the lateral chest leads,
+   * which real right-axis tracings do not do. */
+  function chest(deg, tilt) {
+    var t = transverse(deg);
+    return unit([t[0], tilt || 0, t[2]]);
+  }
+
+  function unit(v) {
+    var m = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) || 1;
+    return [v[0] / m, v[1] / m, v[2] / m];
+  }
+
   var LEAD_VECTORS = {
     I:   frontal(0),
     II:  frontal(60),
@@ -411,22 +432,22 @@ window.EKG = window.EKG || {};
     aVL: frontal(-30),
     aVF: frontal(90),
 
-    V1: transverse(115),
-    V2: transverse(94),
-    V3: transverse(63),
-    V4: transverse(48),
-    V5: transverse(23),
-    V6: transverse(0),
+    V1: chest(115, 0),
+    V2: chest(94, 0),
+    V3: chest(63, 0.10),
+    V4: chest(48, 0.20),
+    V5: chest(23, 0.22),
+    V6: chest(0, 0.22),
 
     // Right-sided chest leads are the mirror image of V4-V6 across the midline.
-    V4R: transverse(132),
-    V5R: transverse(157),
-    V6R: transverse(180),
+    V4R: chest(132, 0.20),
+    V5R: chest(157, 0.22),
+    V6R: chest(180, 0.22),
 
-    // Posterior leads continue around the back past V6.
-    V7: transverse(-22),
-    V8: transverse(-45),
-    V9: transverse(-67)
+    // Posterior leads continue around the back past V6, at the same level.
+    V7: chest(-22, 0.22),
+    V8: chest(-45, 0.22),
+    V9: chest(-67, 0.22)
   };
 
   /* A single central dipole can't know that the chest electrodes sit closer to
@@ -435,21 +456,20 @@ window.EKG = window.EKG || {};
    * comparatively modest, the way a real 12-lead looks. */
   var QRS_GAIN = {
     I: 1, II: 1, III: 1, aVR: 1, aVL: 1, aVF: 1,
-    V1: 1.20, V2: 2.55, V3: 2.45, V4: 2.35, V5: 1.85, V6: 1.40,
-    V4R: 1.55, V5R: 1.35, V6R: 1.15,
+    V1: 1.50, V2: 2.30, V3: 2.45, V4: 2.35, V5: 1.85, V6: 1.40,
+    V4R: 1.30, V5R: 1.15, V6R: 1.00,
     V7: 1.15, V8: 1.00, V9: 0.90
   };
 
   /* A ventricular or paced beat spreads slowly through muscle as a broad
-   * wavefront rather than a compact dipole, so the chest electrodes get far
-   * less of a proximity boost from it than they do from a normal QRS. Using
-   * the normal QRS gains here would drive ventricular complexes clean off the
-   * paper in V2-V4. */
+   * wavefront rather than a compact dipole, so the chest electrodes get less
+   * of a proximity boost from it than they do from a normal QRS -- but not
+   * none: a real PVC is still the biggest thing on the page in V2-V4. */
   var VENT_GAIN = {
     I: 1, II: 1, III: 1, aVR: 1, aVL: 1, aVF: 1,
-    V1: 1.05, V2: 1.15, V3: 1.15, V4: 1.12, V5: 1.05, V6: 1.00,
-    V4R: 1.05, V5R: 1.00, V6R: 0.95,
-    V7: 0.95, V8: 0.90, V9: 0.85
+    V1: 1.30, V2: 1.70, V3: 1.70, V4: 1.60, V5: 1.40, V6: 1.20,
+    V4R: 1.10, V5R: 1.00, V6R: 0.95,
+    V7: 1.00, V8: 0.90, V9: 0.85
   };
 
   /* Injury currents are a slower, more diffuse phenomenon than the QRS spike,
@@ -465,11 +485,6 @@ window.EKG = window.EKG || {};
 
   var STANDARD_12 = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF',
                      'V1', 'V2', 'V3', 'V4', 'V5', 'V6'];
-
-  function unit(v) {
-    var m = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) || 1;
-    return [v[0] / m, v[1] / m, v[2] / m];
-  }
 
   function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
@@ -569,8 +584,17 @@ window.EKG = window.EKG || {};
         : 0.90 * Math.sin(Math.PI * (u - 0.60) / 0.40);
     },
     u: function (u) { return asym(u, 0.5); },
-    // Slow, ramped upstroke -- the WPW delta wave.
-    delta: function (u) { return u * u * (3 - 2 * u); },
+    /* The WPW delta wave: a slow, nearly straight ramp for the first half
+     * (muscle depolarising cell to cell from the pathway's insertion), which
+     * then hands over to the normal activation and dies away beneath it. */
+    delta: function (u) {
+      if (u < 0.62) return Math.pow(u / 0.62, 1.15);
+      return 0.5 * (1 + Math.cos(Math.PI * (u - 0.62) / 0.38));
+    },
+    // A pathological Q: drops promptly, then hands back to the surviving R.
+    qwave: function (u) { return asym(u, 0.42); },
+    // Strain T wave: a slow slide down and a quick snap back.
+    tStrain: function (u) { return asym(u, 0.74); },
     coved: function (u) { return 1 - 0.55 * u * u; }
   };
 
@@ -654,7 +678,7 @@ window.EKG = window.EKG || {};
       wall: 'interventricular septum', leads: 'V1-V2'
     },
     anterior: {
-      label: 'Anterior', dir: [0.05, 0.10, -1], artery: 'LAD',
+      label: 'Anterior', dir: [0.30, 0.10, -1], artery: 'LAD',
       wall: 'anterior wall of the left ventricle', leads: 'V3-V4'
     },
     anteroseptal: {
@@ -674,7 +698,7 @@ window.EKG = window.EKG || {};
       wall: 'lateral wall of the left ventricle', leads: 'I, aVL, V5-V6'
     },
     high_lateral: {
-      label: 'High lateral', dir: [0.87, -0.50, 0.00], artery: 'First diagonal or high circumflex',
+      label: 'High lateral', dir: [0.55, -0.75, -0.35], artery: 'First diagonal or high circumflex',
       wall: 'high lateral wall', leads: 'I, aVL'
     },
     inferior: {
@@ -713,34 +737,64 @@ window.EKG = window.EKG || {};
 
   function axisAngle(cfg) {
     if (cfg.axis === 'lad') return -45;
-    if (cfg.axis === 'rad') return 115;
+    if (cfg.axis === 'rad') return 110;
     if (cfg.axis === 'extreme') return -120;
     if (typeof cfg.axis === 'number') return cfg.axis;
     return 55; // normal
   }
 
+  /* How far forward the early forces lean and how far back the late ones do.
+   * Those two numbers are what turn the QRS from a line into a loop. */
+  var EARLY_Z = -0.25, LATE_Z = 0.90;
+
+  /* A rightward axis is not the whole loop swung round to the right. The
+   * left ventricle still starts the QRS heading down and left; it is the
+   * LATE forces that end up pointing right. So lead I gets a small r and
+   * then a deep S, and V5-V6 keep an R wave with a deep S after it. Rotating
+   * both halves together instead made V5-V6 entirely negative, which is what
+   * dextrocardia looks like, not right axis deviation. */
+  function axisSplit(angle) {
+    return (angle > 90 && angle <= 180) ? [-35, 30] : [0, 0];
+  }
+
   function baseTemplate(cfg) {
     var alpha = axisAngle(cfg);
-    var main = axisDir(alpha, 0.22);
 
     return {
       alpha: alpha,
       pr: 160,
       pDur: 100,
       pAmp: 0.15,
-      pDir: unit([0.5, 0.87, -0.18]),
+      pDir: unit([0.45, 0.85, -0.35]),
       pShape: 'p',
+      pParts: null,            // optional two-component P wave (atrial enlargement)
       prSegmentShift: 0,       // PR-segment depression (pericarditis)
+      prSegmentDir: null,
       qrsDur: 95,
+      /* Ventricular depolarisation is a loop, not a line. The free wall is
+       * activated apex-and-anterior first and base-and-posterior last, so the
+       * vector swings from leftward-anterior round to leftward-posterior as
+       * the QRS goes by.
+       *
+       * Modelling that as ONE main lobe gives every lead the same waveform
+       * scaled by a cosine, and the lead lying across the vector gets nothing:
+       * V3 came out as a tiny fragmented squiggle between a deep S in V2 and a
+       * tall R in V4. With an early and a late lobe pointing different ways,
+       * the transition lead sees the first one coming and the second one
+       * going -- an honest RS complex -- and R-wave progression across the
+       * chest falls out of the geometry. */
       lobes: [
-        { t0: 0,  t1: 22, amp: 0.20, dir: unit([-0.56, 0.10, -0.82]), shape: 'bump', tag: 'septal' },
-        { t0: 6,  t1: 72, amp: 1.55, dir: main,                        shape: 'bump', tag: 'main' },
-        { t0: 54, t1: 95, amp: 0.16, dir: unit([-0.51, -0.56, 0.66]),  shape: 'bump', tag: 'terminal' }
+        { t0: 0,  t1: 24, amp: 0.16, dir: unit([-0.56, 0.10, -0.82]),  shape: 'bump', tag: 'septal' },
+        { t0: 8,  t1: 58, amp: 0.85, dir: axisDir(alpha + axisSplit(alpha)[0], EARLY_Z), shape: 'bump', tag: 'main' },
+        { t0: 26, t1: 80, amp: 0.90, dir: axisDir(alpha + axisSplit(alpha)[1], LATE_Z),  shape: 'bump', tag: 'main2' },
+        { t0: 58, t1: 95, amp: 0.14, dir: unit([-0.50, -0.50, 0.70]),  shape: 'bump', tag: 'terminal' }
       ],
       stSeg: 90,               // J point to T onset, ms
       tDur: 180,
-      tAmp: 0.32,
-      tDir: axisDir(alpha - 12, -0.10),
+      tAmp: 0.30,
+      /* The normal T vector points left, down and FORWARD, which is why the
+       * tallest T waves on a normal tracing are in V2-V4. */
+      tDir: unit(add(axisDir(alpha - 15, 0), [0, 0, -0.50])),
       tShape: 't',
       tExtra: null,            // optional second repolarisation vector
       stVec: [0, 0, 0],
@@ -753,11 +807,42 @@ window.EKG = window.EKG || {};
     };
   }
 
-  function mainLobe(tpl) {
+  function lobeByTag(tpl, tag) {
     for (var i = 0; i < tpl.lobes.length; i++) {
-      if (tpl.lobes[i].tag === 'main') return tpl.lobes[i];
+      if (tpl.lobes[i].tag === tag) return tpl.lobes[i];
     }
-    return tpl.lobes[0];
+    return null;
+  }
+
+  function mainLobe(tpl) { return lobeByTag(tpl, 'main') || tpl.lobes[0]; }
+
+  // Both free-wall lobes, early then late (either may have been removed).
+  function mainLobes(tpl) {
+    return tpl.lobes.filter(function (l) { return l.tag === 'main' || l.tag === 'main2'; });
+  }
+
+  /* Net direction of the QRS: what "concordant" and "discordant" are measured
+   * against, and where a J wave or an Osborn wave points. */
+  function qrsDir(tpl) {
+    var v = [0, 0, 0];
+    tpl.lobes.forEach(function (l) {
+      v = add(v, scale(l.dir, l.amp * (l.t1 - l.t0)));
+    });
+    return unit(v);
+  }
+
+  // Rotate the whole free-wall loop to a new frontal axis, keeping its depth.
+  function setAxis(tpl, angle, earlyZ, lateZ) {
+    var e = lobeByTag(tpl, 'main'), l = lobeByTag(tpl, 'main2');
+    var split = axisSplit(angle);
+    if (e) e.dir = axisDir(angle + split[0], earlyZ === undefined ? EARLY_Z : earlyZ);
+    if (l) l.dir = axisDir(angle + split[1], lateZ === undefined ? LATE_Z : lateZ);
+  }
+
+  function scaleMain(tpl, kEarly, kLate) {
+    var e = lobeByTag(tpl, 'main'), l = lobeByTag(tpl, 'main2');
+    if (e) e.amp *= kEarly;
+    if (l) l.amp *= (kLate === undefined ? kEarly : kLate);
   }
 
   function dropLobe(tpl, tag) {
@@ -771,79 +856,115 @@ window.EKG = window.EKG || {};
     tpl.qrsDur = newDur;
   }
 
+  function shiftLobes(tpl, ms) {
+    tpl.lobes.forEach(function (l) { l.t0 += ms; l.t1 += ms; });
+    tpl.qrsDur += ms;
+  }
+
   /* --------------------------------------------------- conduction defects */
+
+  var RBBB_DIR = unit([-0.65, -0.05, -0.76]);
+
+  function applyRbbbTerminal(tpl, endMs) {
+    // Right ventricle depolarises late, unopposed: a slow terminal vector
+    // pointing right and anterior. rSR' in V1, wide slurred S in I and V6.
+    dropLobe(tpl, 'terminal');
+    tpl.lobes.push({ t0: 60, t1: endMs, amp: 0.58, dir: RBBB_DIR, shape: 'bump', tag: 'rbbbTerminal' });
+    tpl.qrsDur = endMs;
+    // Appropriate discordance: ST/T opposite the terminal forces (V1-V3).
+    tpl.stVec = add(tpl.stVec, scale(RBBB_DIR, -0.07));
+    tpl.tDir = unit(add(scale(tpl.tDir, 0.70), scale(RBBB_DIR, -0.75)));
+  }
 
   function applyConduction(tpl, cfg) {
     switch (cfg.ivcd) {
       case 'rbbb':
-        // Right ventricle depolarises late, unopposed: a slow terminal vector
-        // pointing right and anterior. rSR' in V1, wide slurred S in I and V6.
-        tpl.lobes.push({
-          t0: 62, t1: 138, amp: 0.62, dir: unit([-0.78, -0.08, -0.62]),
-          shape: 'bump', tag: 'rbbbTerminal'
-        });
-        tpl.qrsDur = 138;
-        // Appropriate discordance: ST/T opposite the terminal forces (V1-V3).
-        tpl.stVec = add(tpl.stVec, scale(unit([-0.78, -0.08, -0.62]), -0.09));
-        tpl.tDir = unit(add(scale(tpl.tDir, 0.75), scale(unit([-0.78, -0.08, -0.62]), -0.55)));
+        applyRbbbTerminal(tpl, 138);
         break;
 
       case 'lbbb':
-        // The left ventricle is activated late and from the right, so the
-        // normal left-to-right septal vector disappears (no septal q in I/V6)
-        // and everything is one broad, slurred leftward-posterior sweep.
-        dropLobe(tpl, 'septal');
-        dropLobe(tpl, 'terminal');
-        var lb = mainLobe(tpl);
-        lb.t0 = 0; lb.t1 = 150; lb.amp = 1.85;
-        lb.dir = axisDir(Math.min(axisAngle(cfg), 10), 0.40);
-        tpl.lobes.push({ t0: 30, t1: 120, amp: 0.45, dir: axisDir(-20, 0.55), shape: 'bump', tag: 'lbbbNotch' });
+        /* The left ventricle is activated late, slowly, and from the right, so
+         * the normal left-to-right septal vector disappears (no septal q in
+         * I/V6) and the whole QRS is one broad leftward sweep that ends up
+         * pointing well posterior.
+         *
+         * Two overlapping humps rather than one: the first heads left, the
+         * second left-and-back. That gives the notched "M" in I, aVL and V6,
+         * a slurred QS in V1-V2, and an rS rather than a dead-flat line in the
+         * transition leads.
+         *
+         * The voltages are those of a slow muscle-to-muscle wavefront. Run
+         * through the normal QRS amplitudes this pattern drove every lateral
+         * lead off the top of the paper and V1-V2 off the bottom. */
+        var lbAng = Math.max(-45, Math.min(axisAngle(cfg) - 45, 20));
+        tpl.lobes = [
+          { t0: 0,  t1: 96,  amp: 0.92, dir: axisDir(lbAng, 0.30),      shape: 'bump', tag: 'main' },
+          { t0: 56, t1: 150, amp: 0.82, dir: axisDir(lbAng - 8, 1.00),  shape: 'bump', tag: 'main2' }
+        ];
         tpl.qrsDur = 150;
-        tpl.stVec = add(tpl.stVec, scale(lb.dir, -0.13));
-        tpl.tDir = scale(lb.dir, -1);
-        tpl.tAmp = 0.42;
+        var lbDir = qrsDir(tpl);
+        tpl.stVec = add(tpl.stVec, scale(lbDir, -0.19));
+        tpl.stShape = 'oblique';
+        tpl.tDir = scale(lbDir, -1);
+        tpl.tAmp = 0.30;
         break;
 
       case 'lafb':
         // Anterior fascicle blocked: the impulse reaches the anterosuperior LV
         // late and from below, swinging the axis up and left. qR in I/aVL,
         // rS in II/III/aVF.
-        mainLobe(tpl).dir = axisDir(-50, 0.20);
-        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.24, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
+        setAxis(tpl, -55);
+        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.22, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
         tpl.qrsDur = 100;
+        tpl.tDir = unit(add(axisDir(20, 0), [0, 0, -0.50]));
         break;
 
       case 'lpfb':
-        mainLobe(tpl).dir = axisDir(112, 0.20);
+        setAxis(tpl, 112);
         tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.22, dir: unit([0.85, -0.45, -0.25]), shape: 'bump', tag: 'lpfbInitial' });
         tpl.qrsDur = 100;
         break;
 
       case 'bifascicular':
-        mainLobe(tpl).dir = axisDir(-55, 0.20);
-        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.24, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
-        tpl.lobes.push({ t0: 62, t1: 140, amp: 0.62, dir: unit([-0.78, -0.08, -0.62]), shape: 'bump', tag: 'rbbbTerminal' });
-        tpl.qrsDur = 140;
-        tpl.tDir = unit(add(scale(tpl.tDir, 0.75), scale(unit([-0.78, -0.08, -0.62]), -0.55)));
+        setAxis(tpl, -58);
+        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.22, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
+        tpl.tDir = unit(add(axisDir(20, 0), [0, 0, -0.50]));
+        applyRbbbTerminal(tpl, 140);
         break;
 
       case 'ivcd':
         stretchQrs(tpl, 125);
-        mainLobe(tpl).amp *= 0.95;
+        scaleMain(tpl, 0.95);
         break;
 
       case 'wpw':
-        // Accessory pathway pre-excites ventricular muscle directly: short PR,
-        // slurred delta upstroke, and the QRS is a fusion of both routes.
-        tpl.pr = 95;
-        tpl.lobes.unshift({
-          t0: 0, t1: 55, amp: 0.55,
-          dir: cfg.wpwType === 'b' ? unit([-0.45, 0.55, -0.70]) : unit([0.60, 0.45, 0.65]),
-          shape: 'delta', tag: 'delta'
-        });
-        tpl.qrsDur = 125;
-        tpl.tDir = scale(mainLobe(tpl).dir, -0.6);
-        tpl.tAmp = 0.30;
+        /* An accessory pathway pre-excites ventricular muscle directly. Three
+         * things follow, and all three have to be on the page:
+         *   - the PR is short, because the AV-node delay was bypassed;
+         *   - the QRS starts with a slow slur (the delta wave), because that
+         *     first muscle is depolarised cell to cell;
+         *   - the QRS is wide, because the normal activation arrives on time
+         *     and is simply added to the end of the pre-excited part.
+         * So the normal lobes are pushed LATER and the delta wave fills the
+         * gap in front of them. Starting them all together, as this used to,
+         * hides the delta inside a normal upstroke. */
+        var typeB = cfg.wpwType === 'b';
+        var deltaDir = typeB
+          ? unit([0.80, -0.20, 0.55])    // right-sided pathway: away from V1
+          : unit([0.15, 0.55, -0.82]);   // left-sided pathway: toward V1
+        dropLobe(tpl, 'septal');
+        shiftLobes(tpl, 32);
+        if (!typeB) {
+          // The posterobasal LV has already been depolarised through the
+          // pathway, so the late posterior forces that normally write the S
+          // wave in V1 are largely missing: dominant R in V1.
+          setAxis(tpl, axisAngle(cfg), -0.60, 0.05);
+        }
+        tpl.lobes.unshift({ t0: 0, t1: 74, amp: 0.46, dir: deltaDir, shape: 'delta', tag: 'delta' });
+        tpl.pr = 100;
+        tpl.tDir = unit(add(scale(tpl.tDir, 0.55), scale(deltaDir, -0.70)));
+        tpl.tAmp = 0.24;
+        tpl.stVec = add(tpl.stVec, scale(deltaDir, -0.05));
         break;
     }
     return tpl;
@@ -854,49 +975,107 @@ window.EKG = window.EKG || {};
   function applyChambers(tpl, cfg) {
     switch (cfg.chambers) {
       case 'lvh':
-        mainLobe(tpl).amp *= 1.55;
-        mainLobe(tpl).dir = axisDir(axisAngle(cfg) - 10, 0.30);
+        setAxis(tpl, axisAngle(cfg) - 20, -0.20, 1.05);
+        scaleMain(tpl, 1.40, 1.45);
         tpl.qrsDur = Math.max(tpl.qrsDur, 100);
         break;
       case 'lvh_strain':
-        mainLobe(tpl).amp *= 1.60;
-        mainLobe(tpl).dir = axisDir(axisAngle(cfg) - 12, 0.30);
+        setAxis(tpl, axisAngle(cfg) - 25, -0.20, 1.05);
+        scaleMain(tpl, 1.45, 1.50);
         tpl.qrsDur = Math.max(tpl.qrsDur, 102);
-        // Strain: downsloping ST depression with asymmetric T inversion in the
-        // leads that face the thick muscle (I, aVL, V5, V6).
-        tpl.stVec = add(tpl.stVec, scale(unit([0.92, -0.10, -0.15]), -0.13));
-        tpl.tDir = unit([-0.90, 0.10, 0.30]);
-        tpl.tAmp = 0.34;
+        /* Strain: downsloping ST depression running into an asymmetric
+         * inverted T in the leads that face the thick muscle (I, aVL, V5, V6),
+         * with the mirror image -- ST elevation and a tall upright T -- in
+         * V1-V3. The repolarisation vector therefore has to point right AND
+         * forward; pointing it backward inverts the T in V2-V3 as well, which
+         * turns strain into something that looks like anterior ischaemia. */
+        tpl.stVec = add(tpl.stVec, scale(unit([-0.80, 0.10, -0.60]), 0.14));
+        tpl.tDir = unit([-0.85, 0.40, -0.55]);
+        tpl.tAmp = 0.24;
+        tpl.tShape = 'tStrain';
         tpl.stShape = 'downslope';
         break;
       case 'rvh':
-        mainLobe(tpl).dir = axisDir(115, -0.35); // right and anterior: tall R in V1
-        mainLobe(tpl).amp *= 1.15;
-        tpl.lobes.push({ t0: 50, t1: 100, amp: 0.30, dir: unit([-0.65, -0.30, -0.70]), shape: 'bump', tag: 'rvhTerminal' });
-        tpl.tDir = unit([0.20, 0.30, 0.85]); // T inversion V1-V3
-        tpl.tAmp = 0.30;
+        /* A thick right ventricle drags the whole loop rightward and forward:
+         * a dominant R in V1, an rS in V6, a deep S in lead I. */
+        var rvE = lobeByTag(tpl, 'main'), rvL = lobeByTag(tpl, 'main2'), rvT = lobeByTag(tpl, 'terminal');
+        if (rvE) { rvE.dir = unit([0.15, 0.75, -0.40]); rvE.amp = 0.85; }
+        if (rvL) { rvL.dir = unit([-0.75, 0.45, -0.35]); rvL.amp = 0.90; }
+        // The left ventricle still finishes last and behind: an S wave in
+        // V2-V4 after the tall R, rather than pure R waves right across.
+        if (rvT) { rvT.dir = unit([-0.60, -0.20, 0.75]); rvT.amp = 0.30; rvT.t1 = 100; }
+        tpl.qrsDur = Math.max(tpl.qrsDur, 100);
+        tpl.stVec = add(tpl.stVec, scale(unit([0.20, 0.10, 0.95]), 0.06));
+        tpl.tDir = unit([0.50, 0.40, 0.75]); // T inversion V1-V3
+        tpl.tAmp = 0.22;
+        tpl.stShape = 'downslope';
         break;
       case 'lae':
+        /* The left atrium depolarises second, and it sits at the back. An
+         * enlarged one stretches the second half of the P wave and points it
+         * posteriorly: a broad notched P in II, and in V1 a small upright
+         * start followed by a deep, wide negative finish. */
         tpl.pDur = 130;
-        tpl.pShape = 'pNotched';
-        tpl.pAmp = 0.14;
-        tpl.pDir = unit([0.55, 0.62, 0.55]); // terminal posterior force: biphasic P in V1
+        tpl.pParts = [
+          { u0: 0.00, u1: 0.58, amp: 0.11, dir: unit([0.40, 0.85, -0.40]) },
+          { u0: 0.42, u1: 1.00, amp: 0.12, dir: unit([0.70, 0.40, 0.65]) }
+        ];
         break;
       case 'rae':
         tpl.pAmp = 0.30;
-        tpl.pDir = unit([0.35, 0.90, -0.35]);
+        tpl.pDir = unit([0.30, 0.90, -0.40]);
         break;
       case 'biatrial':
         tpl.pDur = 130;
-        tpl.pAmp = 0.28;
-        tpl.pShape = 'pNotched';
-        tpl.pDir = unit([0.45, 0.80, 0.15]);
+        tpl.pParts = [
+          { u0: 0.00, u1: 0.55, amp: 0.28, dir: unit([0.30, 0.90, -0.40]) },
+          { u0: 0.42, u1: 1.00, amp: 0.13, dir: unit([0.70, 0.40, 0.65]) }
+        ];
         break;
     }
     return tpl;
   }
 
   /* --------------------------------------------------- ischemia / infarct */
+
+  /* Dead muscle, drawn as what it actually is: missing forces.
+   *
+   * A pathological Q wave is not an extra deflection bolted onto the front of
+   * a normal QRS. It is what is left when the wall under the electrode stops
+   * contributing -- the lead looks through an electrical hole and records the
+   * opposite wall depolarising away from it. Two things therefore happen
+   * together, and the old model only did the first:
+   *
+   *   1. an early vector appears pointing AWAY from the scar (the Q wave);
+   *   2. the forces that used to point TOWARD the scar shrink (the R wave
+   *      over the infarct is small or gone).
+   *
+   * Without (2) the tracing shows a narrow little q in front of a full-height
+   * R wave, which is a normal septal q, not an infarct. With it, an anterior
+   * scar gives QS complexes in V1-V3 with the R wave only recovering by
+   * V4-V5, and an inferior scar gives a wide Q with a stunted R in III and
+   * aVF and a smaller q in II.
+   *
+   * kEarly / kLate are the fraction of toward-the-scar force removed from the
+   * early and late parts of the QRS; qAmp is the size of the unopposed
+   * opposite-wall vector. */
+  function applyScar(tpl, n, kEarly, kLate, qAmp, qDur) {
+    n = unit(n);
+    tpl.lobes.forEach(function (lo) {
+      var k = (lo.tag === 'main2' || lo.tag === 'terminal') ? kLate : kEarly;
+      if (!k) return;
+      var v = scale(lo.dir, lo.amp);
+      var toward = v[0] * n[0] + v[1] * n[1] + v[2] * n[2];
+      if (toward <= 0) return;
+      v = add(v, scale(n, -k * toward));
+      var m = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+      lo.amp = m;
+      if (m > 1e-6) lo.dir = scale(v, 1 / m);
+    });
+    if (qAmp > 0) {
+      tpl.lobes.unshift({ t0: 0, t1: qDur || 46, amp: qAmp, dir: scale(n, -1), shape: 'qwave', tag: 'qwave' });
+    }
+  }
 
   function applyIschemia(tpl, cfg) {
     var terr = TERRITORIES[cfg.ischemia];
@@ -912,25 +1091,22 @@ window.EKG = window.EKG || {};
        * projection onto all six limb leads, because they lie in the frontal
        * plane. So it inverts V1-V4 hardest, fades through V5, and leaves V6
        * and every limb lead untouched -- which is precisely the distribution
-       * Wellens has. Replacing the T vector outright (the previous approach)
-       * flattened the limb leads, which real Wellens does not do.
-       *
-       * The normal T is trimmed a little so the added vector can carry the
-       * anterior leads negative without needing an implausible magnitude. */
+       * Wellens has. */
       if (cfg.ischemia === 'wellens_b') {
         // Type B: deep, symmetric, rounded T inversion in V2-V4.
-        tpl.tAmp = 0.22;
-        tpl.tExtra = { amp: 0.26, dir: [0, 0, 1], shape: 'tSym' };
+        tpl.tAmp = 0.20;
+        tpl.tShape = 'tSym';
+        tpl.tExtra = { amp: 0.36, dir: [0, 0, 1], shape: 'tSym' };
       } else {
         /* Type A: biphasic. The ST-T leaves the J point slightly elevated,
-         * arcs up into a broad rounded positive hump, then descends through
-         * the baseline into a shallower terminal negative trough.
+         * arcs up into a rounded positive hump, then descends through the
+         * baseline into a terminal negative trough.
          *
          * A negative shape value points the vector anterior (upright in the
          * chest leads) and a positive one points it posterior (inverted), so
          * one biphasic shape produces the whole up-then-down morphology. */
-        tpl.tAmp = 0.18;
-        tpl.tExtra = { amp: 0.105, dir: [0, 0, 1], shape: 'wellensBiphasic' };
+        tpl.tAmp = 0.10;
+        tpl.tExtra = { amp: 0.15, dir: [0, 0, 1], shape: 'wellensBiphasic' };
         tpl.stVec = add(tpl.stVec, scale(unit([0.05, 0.0, -1]), 0.05));
         tpl.stShape = 'oblique';
       }
@@ -939,12 +1115,14 @@ window.EKG = window.EKG || {};
 
     if (cfg.ischemia === 'de_winter') {
       // Proximal LAD occlusion equivalent: upsloping ST depression at the J
-      // point in the precordials, running into tall symmetric T waves.
-      tpl.stVec = [0.05, 0.05, 0.30];
+      // point in the precordials, running into tall symmetric T waves, with a
+      // little ST elevation in aVR.
+      tpl.stVec = [-0.05, -0.02, 0.19];
       tpl.stShape = 'upslope';
-      tpl.tDir = unit([0.10, 0.10, -0.95]);
-      tpl.tAmp = 0.75;
+      tpl.tDir = unit([0.15, 0.10, -0.95]);
+      tpl.tAmp = 0.50;
       tpl.tShape = 'tSym';
+      tpl.stSeg = 70;
       return tpl;
     }
 
@@ -952,28 +1130,44 @@ window.EKG = window.EKG || {};
 
     var mag = SEVERITY[cfg.severity] || SEVERITY.moderate;
     var dir = unit(terr.dir);
+    var posterior = cfg.ischemia === 'posterior' || cfg.ischemia === 'inferoposterior';
+
+    if (cfg.ischemia === 'subendocardial') {
+      /* Not an occlusion: the whole inner layer is short of oxygen, and the
+       * injury current points away from the cavity -- toward aVR. Horizontal
+       * or downsloping depression everywhere else, T waves flattened rather
+       * than transformed, QRS untouched. */
+      tpl.stVec = add(tpl.stVec, scale(dir, mag));
+      tpl.stShape = 'flat';
+      tpl.tAmp = 0.14;
+      return tpl;
+    }
 
     if (cfg.stage === 'hyperacute') {
       // Earliest minutes: the T wave grows fat and broad-based over the
       // infarct before the ST segment properly lifts.
-      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.55));
+      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.45));
       tpl.stShape = 'oblique';
       tpl.tDir = unit(add(scale(tpl.tDir, 0.25), scale(dir, 1.0)));
-      tpl.tAmp = 0.80;
+      tpl.tAmp = 0.52;
       tpl.tShape = 'tSym';
-      tpl.tDur = 210;
+      tpl.tDur = 215;
+      tpl.stSeg = 70;
     } else if (cfg.stage === 'evolving') {
-      // Hours to days: ST settles, Q waves appear, T waves invert.
-      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.45));
+      /* Hours to days: the ST segment is settling but still up and still
+       * domed, Q waves have formed, and the T wave has turned over -- the
+       * terminal T inversion of a completed infarct. */
+      tpl.stVec = add(tpl.stVec, scale(dir, Math.max(0.10, mag * 0.55)));
       tpl.stShape = 'convex';
-      tpl.tDir = unit(add(scale(tpl.tDir, 0.2), scale(dir, -1.0)));
-      tpl.tAmp = 0.45;
+      tpl.tDir = unit(add(scale(tpl.tDir, 0.15), scale(dir, -1.0)));
+      tpl.tAmp = 0.30;
       tpl.tShape = 'tSym';
-      tpl.lobes.unshift({ t0: 0, t1: 40, amp: mag * 1.6, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
+      applyScar(tpl, dir, 0.75, posterior ? 0.70 : 0.30, 0.28, 46);
     } else if (cfg.stage === 'old') {
-      // Established scar: Q waves only, ST back to baseline.
-      tpl.lobes.unshift({ t0: 0, t1: 42, amp: 0.62, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
-      tpl.tDir = unit(add(scale(tpl.tDir, 0.6), scale(dir, -0.5)));
+      // Established scar: Q waves and lost R waves; ST back on the baseline.
+      applyScar(tpl, dir, 0.92, posterior ? 0.80 : 0.35, 0.36, 56);
+      tpl.tDir = unit(add(scale(tpl.tDir, 0.75), scale(dir, -0.45)));
+      tpl.tAmp = 0.22;
     } else {
       /* Acute: the classic injury pattern. Real STEMI takes off convex
        * ("domed") or obliquely straight -- never the concave saddle of early
@@ -982,12 +1176,23 @@ window.EKG = window.EKG || {};
        * of a STEMI's ST-T dome sits only a little above its J point. */
       tpl.stVec = add(tpl.stVec, scale(dir, mag));
       tpl.stShape = (cfg.severity === 'marked' || cfg.severity === 'tombstone') ? 'convex' : 'oblique';
-      tpl.tDir = unit(add(scale(tpl.tDir, 0.45), scale(dir, 0.85)));
-      tpl.tAmp = 0.32;
-
-      if (cfg.qWaves) {
-        tpl.lobes.unshift({ t0: 0, t1: 40, amp: mag * 1.5, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
+      if (posterior) {
+        /* The posterior wall is read in a mirror. Behind the heart the T is
+         * part of the injury dome; from the front that same vector shows as
+         * ST depression, and the classic V1-V3 picture -- a tall R, a
+         * depressed ST and an UPRIGHT T -- is the mirror image of the Q wave,
+         * ST elevation and T inversion of an infarct a few hours old. */
+        tpl.tDir = unit(add(scale(tpl.tDir, 0.80), scale(dir, cfg.ischemia === 'posterior' ? -0.70 : 0.25)));
+        tpl.tAmp = 0.30;
+        // Horizontal, not deepening: the mirror of a flat-topped elevation.
+        if (cfg.ischemia === 'posterior') tpl.stShape = 'flat';
+        applyScar(tpl, [0.10, 0.10, 1.0], 0, 0.75, 0.22, 50);
+      } else {
+        tpl.tDir = unit(add(scale(tpl.tDir, 0.45), scale(dir, 0.85)));
+        tpl.tAmp = 0.30;
       }
+
+      if (cfg.qWaves) applyScar(tpl, dir, 0.60, 0.20, 0.24, 44);
     }
 
     /* Injured muscle generates little late depolarisation force, which is why
@@ -1004,7 +1209,7 @@ window.EKG = window.EKG || {};
      * STEMI loses its terminal forces almost entirely. Deliberately NOT
      * applied to pericarditis or early repolarisation (handled in
      * applyPattern): that muscle is alive and keeps its normal S waves. */
-    if (mag > 0 && cfg.ischemia !== 'subendocardial') {
+    if (mag > 0 && cfg.stage !== 'old') {
       tpl.lobes.forEach(function (lo) {
         if (lo.tag === 'terminal') lo.amp *= 1 / (1 + 12 * mag);
       });
@@ -1047,6 +1252,7 @@ window.EKG = window.EKG || {};
         var sineMain = mainLobe(tpl);
         dropLobe(tpl, 'septal');
         dropLobe(tpl, 'terminal');
+        dropLobe(tpl, 'main2');
         tpl.pAmp = 0; tpl.pr = 0;              // atrial muscle is paralysed
         sineMain.t0 = 0;
         sineMain.t1 = Math.min(420, cycle * 0.40);
@@ -1109,7 +1315,7 @@ window.EKG = window.EKG || {};
         break;
       case 'hypok':
         tpl.tAmp = 0.10; tpl.uAmp = 0.22; tpl.uDur = 160;
-        tpl.stVec = add(tpl.stVec, scale(unit(mainLobe(tpl).dir), -0.07));
+        tpl.stVec = add(tpl.stVec, scale(qrsDir(tpl), -0.07));
         tpl.stShape = 'downslope';
         break;
       case 'hypercalcemia':
@@ -1119,52 +1325,75 @@ window.EKG = window.EKG || {};
         tpl.stSeg = 210; tpl.tDur = 180;
         break;
       case 'digoxin':
-        // "Salvador Dali moustache": sagging ST depression, short QT.
-        tpl.stSeg = 50; tpl.tDur = 150; tpl.tAmp = 0.16;
-        tpl.stVec = add(tpl.stVec, scale(unit(mainLobe(tpl).dir), -0.10));
+        /* The "reverse tick": the ST segment sags away from the QRS in a
+         * smooth scoop and hooks back up into a small terminal T, with a
+         * short QT. It follows the QRS -- deepest where the R wave is
+         * tallest -- rather than any coronary territory. */
+        tpl.stSeg = 110; tpl.tDur = 110; tpl.tAmp = 0.11;
+        tpl.stVec = add(tpl.stVec, scale(qrsDir(tpl), -0.11));
         tpl.stShape = 'sagging';
+        tpl.shortQT = true;
         break;
       case 'hypothermia':
         // Osborn (J) wave: a positive hump right at the end of the QRS, in the
         // same direction as the main QRS forces.
         tpl.lobes.push({
           t0: tpl.qrsDur - 10, t1: tpl.qrsDur + 60, amp: 0.42,
-          dir: unit(mainLobe(tpl).dir), shape: 'bump', tag: 'osborn'
+          dir: qrsDir(tpl), shape: 'bump', tag: 'osborn'
         });
         tpl.stSeg = 120; tpl.tDur = 200; tpl.pr = 220;
         break;
       case 'pericarditis':
-        // Diffuse epicardial injury: ST elevation almost everywhere, with PR
-        // segment depression from atrial involvement.
-        tpl.stVec = add(tpl.stVec, scale(unit([0.30, 0.72, -0.62]), 0.17));
+        /* Diffuse epicardial injury: concave ST elevation in almost every
+         * lead (I, II, aVF, V2-V6), depression only in aVR and sometimes V1,
+         * and PR-segment depression from the inflamed atria -- with the PR
+         * segment going UP in aVR. */
+        tpl.stVec = add(tpl.stVec, scale(unit([0.55, 0.65, -0.50]), 0.20));
         tpl.stShape = 'concave';
-        tpl.prSegmentShift = -0.055;
-        tpl.tAmp = 0.36;
+        tpl.prSegmentShift = -0.08;
+        tpl.prSegmentDir = unit([0.55, 0.65, -0.30]);
+        tpl.tAmp = 0.34;
         break;
       case 'early_repol':
         tpl.stVec = add(tpl.stVec, scale(unit([0.30, 0.45, -0.85]), 0.14));
         tpl.stShape = 'concave';
-        tpl.tAmp = 0.55;
+        tpl.tAmp = 0.46;
         tpl.lobes.push({
-          t0: tpl.qrsDur - 12, t1: tpl.qrsDur + 26, amp: 0.16,
-          dir: unit(mainLobe(tpl).dir), shape: 'bump', tag: 'jNotch'
+          t0: tpl.qrsDur - 12, t1: tpl.qrsDur + 26, amp: 0.14,
+          dir: unit([0.55, 0.45, -0.70]), shape: 'bump', tag: 'jNotch'
         });
         break;
       case 'brugada':
-        tpl.overlays.push({
-          leads: ['V1', 'V2'], t0: 'j', dur: 260, amp: 0.32, shape: 'covedST', tag: 'brugada'
-        });
-        tpl.lobes.push({ t0: 60, t1: 120, amp: 0.30, dir: unit([-0.70, -0.25, -0.66]), shape: 'bump', tag: 'brugadaR' });
-        tpl.qrsDur = Math.max(tpl.qrsDur, 120);
+        /* Type 1: an rSR'-like complex in V1-V2 whose terminal R' never comes
+         * back down -- it leaves at 2 mm or more and slides, coved, straight
+         * into an inverted T wave. It is a strictly local right-ventricular
+         * outflow phenomenon, so it is drawn on V1-V2 alone and the rest of
+         * the tracing stays normal. */
+        tpl.qrsDur = Math.max(tpl.qrsDur, 110);
+        // Flatten the ordinary T in the right chest leads so the coved
+        // descent, not a normal upright T, decides what V1-V2 look like.
+        tpl.tDir = unit(add(axisDir(tpl.alpha - 15, 0), [0.15, 0, 0.05]));
+        // The overlay starts inside the terminal QRS and climbs to its
+        // take-off point, so the r' and the coved ST are one unbroken line.
+        tpl.overlays.push({ leads: ['V1'], t0: 'j', lead: -42, dur: 340, amp: 0.27, shape: 'covedST', tag: 'brugada' });
+        tpl.overlays.push({ leads: ['V2'], t0: 'j', lead: -42, dur: 340, amp: 0.38, shape: 'covedST', tag: 'brugada' });
         break;
       case 'pe':
-        // S1Q3T3 plus right heart strain: right axis, S in I, Q and inverted
-        // T in III, T inversion across the right precordials.
-        mainLobe(tpl).dir = axisDir(100, 0.20);
-        tpl.lobes.push({ t0: 52, t1: 108, amp: 0.34, dir: unit([-0.85, -0.20, 0.48]), shape: 'bump', tag: 'sWaveI' });
-        tpl.lobes.unshift({ t0: 0, t1: 34, amp: 0.26, dir: unit([0.30, -0.92, 0.24]), shape: 'bump', tag: 'qIII' });
-        tpl.tDir = unit([0.15, -0.35, 0.92]);
-        tpl.tAmp = 0.30;
+        /* Acute right heart strain. The dilated right ventricle rotates the
+         * heart clockwise and conducts late:
+         *   S1  - a late rightward force (S wave in I, persisting to V6)
+         *   Q3  - a small early force pointing up and left (q in III, r in I)
+         *   T3  - T inversion in III, and across V1-V4
+         * plus a rightward axis and an incomplete RBBB. The R waves in the
+         * lateral chest leads are still there -- they just have an S after
+         * them. */
+        setAxis(tpl, 80, -0.20, 0.80);
+        dropLobe(tpl, 'terminal');
+        tpl.lobes.push({ t0: 54, t1: 108, amp: 0.36, dir: unit([-0.85, -0.15, -0.25]), shape: 'bump', tag: 'sWaveI' });
+        tpl.lobes.unshift({ t0: 0, t1: 30, amp: 0.34, dir: unit([0.75, -0.60, 0.00]), shape: 'bump', tag: 'qIII' });
+        tpl.tDir = unit([0.55, -0.15, 0.80]);
+        tpl.tAmp = 0.22;
+        tpl.tShape = 'tSym';
         tpl.qrsDur = Math.max(tpl.qrsDur, 108);
         break;
       case 'low_voltage':
@@ -1172,7 +1401,7 @@ window.EKG = window.EKG || {};
         break;
       case 'tca':
         stretchQrs(tpl, 140);
-        tpl.lobes.push({ t0: 80, t1: 140, amp: 0.42, dir: unit([-0.86, -0.50, 0.10]), shape: 'bump', tag: 'terminalR_aVR' });
+        tpl.lobes.push({ t0: 80, t1: 140, amp: 0.50, dir: unit([-0.86, -0.50, 0.10]), shape: 'bump', tag: 'terminalR_aVR' });
         tpl.stSeg = 140; tpl.tDur = 200;
         break;
       case 'lqts':
@@ -1184,58 +1413,66 @@ window.EKG = window.EKG || {};
 
   /* ------------------------------------------------------ ectopic beats */
 
-  // A ventricular beat: no P wave, wide and bizarre, T wave opposite the QRS.
-  function ventricularTemplate(cfg, origin) {
+  /* A beat that starts in ventricular muscle. No P wave, wide, and the T wave
+   * opposite the QRS.
+   *
+   * Like the normal beat it is a loop, not a line: the wavefront leaves the
+   * focus heading one way and finishes heading another. Drawn as a single
+   * direction, whichever chest lead happened to lie across it recorded
+   * nothing at all, and a ventricular tachycardia came out with a dead-flat
+   * V4 between two rows of huge complexes. */
+  function wideTemplate(cfg, dA, dB, dur, amp) {
     var tpl = baseTemplate(cfg);
     tpl.pAmp = 0; tpl.pr = 0;
-    tpl.lobes = [];
-    var dir;
-    if (origin === 'lv') {
-      // Left ventricular focus: depolarisation runs left-to-right, so V1 goes
-      // positive — an RBBB-like morphology with a rightward axis.
-      dir = unit([-0.35, 0.55, -0.75]);
-    } else if (origin === 'rvot') {
-      // Right ventricular outflow tract: LBBB-like, but heading downward,
-      // giving the characteristic tall inferior complexes.
-      dir = unit([0.35, 0.90, 0.25]);
-    } else {
-      // Right ventricular focus: LBBB-like with the classic left superior
-      // ("northwest") axis — negative in II, III and aVF, negative in V1.
-      dir = unit([0.34, -0.94, 0.35]);
-    }
-    tpl.lobes.push({ t0: 0, t1: 148, amp: 1.45, dir: dir, shape: 'bump', tag: 'main' });
-    tpl.lobes.push({ t0: 40, t1: 130, amp: 0.38, dir: unit(add(dir, [0.2, 0.2, 0.1])), shape: 'bump', tag: 'slur' });
-    tpl.qrsDur = 148;
-    tpl.stSeg = 60;
+    dA = unit(dA); dB = unit(dB);
+    tpl.lobes = [
+      { t0: 0,          t1: dur * 0.64, amp: amp * 0.92, dir: dA, shape: 'bump', tag: 'main' },
+      { t0: dur * 0.30, t1: dur,        amp: amp * 1.10, dir: dB, shape: 'bump', tag: 'main2' }
+    ];
+    tpl.qrsDur = dur;
+    var net = qrsDir(tpl);
+    tpl.stSeg = 50;
     tpl.tDur = 210;
-    tpl.tAmp = 0.55;
-    tpl.tDir = scale(dir, -1);
-    tpl.stVec = scale(dir, -0.12);
-    tpl.stShape = 'flat';
+    tpl.tAmp = 0.42;
+    tpl.tShape = 'tSym';
+    tpl.tDir = scale(net, -1);
+    tpl.stVec = scale(net, -0.20);
+    tpl.stShape = 'oblique';
     tpl.overlays = [];
     return tpl;
   }
 
-  // A paced beat: RV apical lead gives an LBBB-like, left-axis complex.
+  function ventricularTemplate(cfg, origin) {
+    if (origin === 'lv') {
+      // Left ventricular focus: depolarisation runs left-to-right, so V1 goes
+      // positive (RBBB-like) with a rightward axis and a deep S in V6.
+      return wideTemplate(cfg, [-0.30, 0.40, -0.80], [-0.75, 0.55, -0.10], 150, 1.35);
+    }
+    if (origin === 'rvot') {
+      // Right ventricular outflow tract: LBBB-like, but heading downward,
+      // giving the characteristic tall inferior complexes.
+      return wideTemplate(cfg, [0.20, 0.85, -0.10], [0.45, 0.80, 0.65], 142, 1.30);
+    }
+    // Right ventricular apex: LBBB-like with a left superior axis -- negative
+    // in II, III and aVF, a deep QS in V1-V3, upright in I, aVL and V6.
+    return wideTemplate(cfg, [0.55, -0.55, 0.10], [0.25, -0.80, 0.75], 150, 1.35);
+  }
+
+  // A paced beat: an RV apical lead gives an LBBB-like, left-axis complex.
   function pacedTemplate(cfg, mode) {
-    var tpl = baseTemplate(cfg);
-    tpl.lobes = [];
-    /* Right ventricular apical pacing depolarises from the apex upward, so the
-     * axis swings left and superior: negative in II, III and aVF, deeply
-     * negative in V1 (LBBB-like), positive in I and V6. */
-    var dir = unit([0.32, -0.88, 0.38]);
-    if (mode === 'biv') dir = unit([-0.45, 0.40, -0.72]); // biventricular: often positive in V1
-    tpl.lobes.push({ t0: 0, t1: 158, amp: 1.45, dir: dir, shape: 'bump', tag: 'main' });
-    tpl.lobes.push({ t0: 45, t1: 140, amp: 0.35, dir: unit(add(dir, [0.15, 0.25, 0])), shape: 'bump', tag: 'slur' });
-    tpl.qrsDur = 158;
-    tpl.stSeg = 70;
-    tpl.tDur = 210;
-    tpl.tAmp = 0.5;
-    tpl.tDir = scale(dir, -1);
-    tpl.stVec = scale(dir, -0.14);
-    tpl.pAmp = 0;
-    tpl.pr = 0;
-    tpl.overlays = [];
+    var tpl;
+    if (mode === 'biv') {
+      // Biventricular: the LV lead fires from the lateral wall, so activation
+      // runs rightward -- a dominant R in V1, negative in lead I, and a
+      // narrower QRS than RV pacing alone.
+      tpl = wideTemplate(cfg, [-0.50, 0.20, -0.75], [-0.60, -0.50, -0.20], 138, 1.05);
+    } else {
+      /* Right ventricular apical pacing depolarises from the apex upward, so
+       * the axis swings left and superior: negative in II, III and aVF,
+       * deeply negative in V1 (LBBB-like), positive in I and aVL. */
+      tpl = wideTemplate(cfg, [0.60, -0.60, 0.20], [0.20, -0.80, 0.70], 158, 1.20);
+    }
+    tpl.stSeg = 60;
     return tpl;
   }
 
@@ -1249,7 +1486,10 @@ window.EKG = window.EKG || {};
     // A sine wave is already sized to the cycle; rescaling would undo that.
     if (tpl.sineWave) return tpl;
     var k = Math.sqrt(meanRR / 0.8);
-    k = Math.max(0.72, Math.min(1.38, k));
+    /* The floor matters at SVT rates: holding the QT at 72% of its resting
+     * length made every fast narrow tachycardia print a "prolonged QTc". */
+    k = Math.max(0.58, Math.min(1.38, k));
+    if (tpl.shortQT) k = Math.min(k, 1.0);
     tpl.stSeg *= k;
     tpl.tDur *= k;
     tpl.uDur *= k;
@@ -1281,7 +1521,8 @@ window.EKG = window.EKG || {};
     ventricularTemplate: ventricularTemplate,
     pacedTemplate: pacedTemplate,
     axisAngle: axisAngle,
-    mainLobe: mainLobe
+    mainLobe: mainLobe,
+    qrsDir: qrsDir
   };
 })(window.EKG);
 
@@ -1394,7 +1635,9 @@ window.EKG = window.EKG || {};
       var fRate = cfg.flutterRate || 300;
       out.flutter = { rate: fRate };
       out.atrialRate = fRate;
-      var ratio = cfg.flutterConduction || 2;
+      // 0 means variable block, so it must not fall through to the default.
+      var ratio = (cfg.flutterConduction === 0 || cfg.flutterConduction === '0')
+        ? 0 : (Number(cfg.flutterConduction) || 2);
       var fInt = 60 / fRate;
       var vt2 = 0.4, k = 0;
       while (vt2 < duration) {
@@ -1418,6 +1661,11 @@ window.EKG = window.EKG || {};
           out.pWaves.push({ t: t3 + offset, kind: 'retro' });
         }
         if (rhythm === 'atach') out.pWaves.push({ t: t3 - 0.11, kind: 'ectopic' });
+        /* Typical AVNRT: atria and ventricles fire almost together, so the
+         * retrograde P lands in the tail of the QRS -- a pseudo-S in the
+         * inferior leads and a pseudo-r' in V1. It is the only atrial
+         * activity an SVT shows, and worth being able to find. */
+        if (rhythm === 'svt') out.pWaves.push({ t: t3 + 0.075, kind: 'retro' });
         t3 += rr * (1 + (rnd(seed) - 0.5) * 0.01);
       }
       out.atrialRate = rhythm === 'atach' ? rate : null;
@@ -1620,6 +1868,14 @@ window.EKG = window.EKG || {};
       return out;
     }
 
+    /* A device with an atrial lead owns the atria: it either paces them or
+     * tracks them, so the slower native sinus P waves do not wander through
+     * the paced rhythm. (A single-chamber VVI pacer cannot see the atria at
+     * all, and there the dissociated native P waves are left in on purpose.) */
+    if (mode === 'atrial' || mode === 'av_sequential' || mode === 'biventricular') {
+      out.pWaves = [];
+    }
+
     while (t < duration) {
       beatNo++;
       var captured = true;
@@ -1641,6 +1897,8 @@ window.EKG = window.EKG || {};
         if (captured) complexes.push({ t: t + 0.20, kind: 'paced', mode: 'v', ampScale: 1 });
       } else {
         // ventricular or biventricular
+        // CRT tracks the patient's own P wave and paces both ventricles after it.
+        if (mode === 'biventricular') out.pWaves.push({ t: t - 0.13, kind: 'sinus' });
         var st = sensed ? t : t - 0.12;   // undersensing: spike lands too early
         spikes.push({ t: st, chamber: 'V', captured: captured && sensed });
         if (captured && sensed) {
@@ -1697,7 +1955,17 @@ window.EKG = window.EKG || {};
 
   var OVERLAY_SHAPES = {
     bump: M.SHAPES.bump,
-    covedST: function (u) { return 1 - 1.9 * Math.pow(u, 0.7); }
+    /* Brugada type 1. Leaves the J point at full height, rolls over a convex
+     * shoulder, crosses the baseline about half way and bottoms out in a
+     * shallow inverted T before coming back -- one smooth curve, with no
+     * step at either end. */
+    covedST: function (u) {
+      var rise = 0.12;                       // climbing out of the S wave
+      if (u < rise) return 0.5 * (1 - Math.cos(Math.PI * u / rise));
+      var v = (u - rise) / (1 - rise);
+      if (v < 0.60) return 1 - 1.42 * 0.5 * (1 - Math.cos(Math.PI * v / 0.60));
+      return -0.42 * 0.5 * (1 + Math.cos(Math.PI * (v - 0.60) / 0.40));
+    }
   };
 
   function makeRng(seed) {
@@ -1745,6 +2013,16 @@ window.EKG = window.EKG || {};
       var spin = [0, -35, 40][morph || 0];
       dir = L.axisDir(60 + spin, -0.15 + (morph || 0) * 0.15);
     }
+    /* Atrial enlargement draws the two atria separately: right first, left
+     * second and pointing backward. Only a normal sinus P is split this way;
+     * ectopic, retrograde and paced P waves keep a single component. */
+    if (tpl.pParts && (!kind || kind === 'sinus')) {
+      tpl.pParts.forEach(function (part) {
+        paint(buf.vx, buf.vy, buf.vz, fs, tP + part.u0 * dur, tP + part.u1 * dur,
+          part.amp, part.dir, M.SHAPES.bump);
+      });
+      return;
+    }
     paint(buf.vx, buf.vy, buf.vz, fs, tP, tP + dur, amp, dir, shape);
   }
 
@@ -1759,7 +2037,7 @@ window.EKG = window.EKG || {};
     if (tpl.prSegmentShift && tpl.pr > 0) {
       var prSegStart = tQRS - (tpl.pr - tpl.pDur) / 1000;
       paint(buf.vx, buf.vy, buf.vz, fs, prSegStart, tQRS,
-        tpl.prSegmentShift * gain, L.unit([0.3, 0.72, -0.62]),
+        tpl.prSegmentShift * gain, tpl.prSegmentDir || L.unit([0.3, 0.72, -0.62]),
         function () { return 1; });
     }
 
@@ -1818,6 +2096,7 @@ window.EKG = window.EKG || {};
     if (overlayOut && tpl.overlays) {
       tpl.overlays.forEach(function (ov) {
         var start = ov.t0 === 'j' ? qrsEnd : (ov.t0 === 'tStart' ? tStart : tQRS + (ov.t0 || 0) / 1000);
+        start += (ov.lead || 0) / 1000;
         overlayOut.push({
           leads: ov.leads, t0: start, t1: start + ov.dur / 1000,
           amp: ov.amp * gain, shape: ov.shape
@@ -1869,14 +2148,29 @@ window.EKG = window.EKG || {};
         for (var i = 0; i < n; i++) d[i] += Math.sin(2 * Math.PI * 60 * i / fs + ph) * 0.055;
       });
     } else if (kind === 'loose_lead') {
+      /* An electrode losing contact: bursts of wild, slow, high-amplitude
+       * swings with fast hash on top, coming and going as the patient
+       * moves. The bursts are spread over the whole ten seconds so that at
+       * least one lands inside the 2.5-second window in which this lead is
+       * actually printed -- confined to the middle of the strip, the fault
+       * was invisible on any lead in the first or last column. */
       var target = cfg.looseLead || 'III';
       var d2 = leadData[target];
       if (d2) {
-        var start = Math.round(n * 0.25), stop = Math.round(n * 0.62), v = 0;
-        for (var i2 = start; i2 < stop; i2++) {
-          v = v * 0.9 + (rng() - 0.5) * 0.9;
-          d2[i2] += v + Math.sin(i2 / 7) * 0.4;
-        }
+        var bursts = [[0.3, 1.5], [3.0, 4.3], [5.6, 6.9], [8.1, 9.4]];
+        var v = 0, slow = 0;
+        bursts.forEach(function (bw) {
+          var i0 = Math.round(bw[0] * fs), i1 = Math.min(n, Math.round(bw[1] * fs));
+          var phs = rng() * 6.28, f1 = 1.1 + rng() * 1.3;
+          for (var i2 = i0; i2 < i1; i2++) {
+            var u = (i2 - i0) / (i1 - i0);
+            var edge = Math.min(1, u / 0.12, (1 - u) / 0.12);
+            v = v * 0.86 + (rng() - 0.5) * 0.55;
+            slow = Math.sin(2 * Math.PI * f1 * (i2 - i0) / fs + phs) * 0.75 +
+                   Math.sin(2 * Math.PI * f1 * 2.7 * (i2 - i0) / fs) * 0.30;
+            d2[i2] += (v + slow) * edge;
+          }
+        });
       }
     }
   }
@@ -1956,14 +2250,27 @@ window.EKG = window.EKG || {};
     var overlays = [];
 
     if (sched.chaos && sched.chaos.kind === 'vfib') {
-      var amp = sched.chaos.coarse ? 0.85 : 0.18;
-      var ph1 = 0, ph2 = 0, ph3 = 0;
+      /* Fibrillation has no fixed axis. Three oscillators that drift in
+       * frequency and never stay in step, one per spatial direction, make
+       * the vector wander through space -- so every lead shows the same
+       * chaos at a different size and phase. Driving all three axes from one
+       * waveform (the earlier version) gave twelve scaled copies of a single
+       * squiggle, with whichever leads lay across that fixed direction
+       * almost flat. The amplitude also waxes and wanes, as real coarse VF
+       * does. */
+      var amp = sched.chaos.coarse ? 0.62 : 0.14;
+      var ph = [rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28];
+      var fBase = [4.6, 5.3, 4.1, 7.4, 6.6, 8.1];
+      var drift = [700, 930, 1180, 610, 840, 1010];
+      var envPh = rng() * 6.28;
       for (var i = 0; i < n; i++) {
-        ph1 += (4.5 + Math.sin(i / 900) * 1.6) * 2 * Math.PI / fs;
-        ph2 += (7.3 + Math.cos(i / 640) * 2.1) * 2 * Math.PI / fs;
-        ph3 += (2.7 + Math.sin(i / 1400) * 0.9) * 2 * Math.PI / fs;
-        var v = (Math.sin(ph1) * 0.6 + Math.sin(ph2) * 0.3 + Math.sin(ph3) * 0.5) * amp;
-        buf.vx[i] += v * 0.5; buf.vy[i] += v * 0.75; buf.vz[i] += v * 0.35;
+        for (var k = 0; k < 6; k++) {
+          ph[k] += (fBase[k] + Math.sin(i / drift[k] + k) * 1.3) * 2 * Math.PI / fs;
+        }
+        var env = amp * (0.72 + 0.28 * Math.sin(i / 1150 + envPh) + 0.16 * Math.sin(i / 430 + 1.7));
+        buf.vx[i] += env * (Math.sin(ph[0]) * 0.75 + Math.sin(ph[3]) * 0.30);
+        buf.vy[i] += env * (Math.sin(ph[1]) * 0.80 + Math.sin(ph[4]) * 0.30);
+        buf.vz[i] += env * (Math.sin(ph[2]) * 0.50 + Math.sin(ph[5]) * 0.22);
       }
     } else if (sched.chaos && sched.chaos.kind === 'asystole') {
       // nothing but the noise added later
@@ -1982,14 +2289,24 @@ window.EKG = window.EKG || {};
         }
       }
       if (sched.fib) {
-        var fibDir = L.unit([0.2, 0.8, -0.2]);
-        var acc = 0;
+        /* Fibrillatory waves: continuous, irregular, 350-600 a minute, never
+         * the same twice -- and biggest in V1, which sits right over the
+         * atria. A handful of drifting oscillators in the 5-9 Hz band gives
+         * that; filtered white noise (the earlier version) just looked like a
+         * noisy baseline with no f waves in it. */
+        var fibDir = L.unit([-0.30, 0.55, -0.75]);
+        var fp = [rng() * 6.28, rng() * 6.28, rng() * 6.28];
+        var ff = [5.6, 7.1, 8.7];
+        var famp = (cfg.rhythm === 'afib_slow' ? 0.035 : 0.05);
         for (var g = 0; g < n; g++) {
-          acc = acc * 0.72 + (rng() - 0.5) * 0.5;
-          var famp = (cfg.rhythm === 'afib_slow' ? 0.05 : 0.085);
-          buf.vx[g] += acc * famp * fibDir[0];
-          buf.vy[g] += acc * famp * fibDir[1];
-          buf.vz[g] += acc * famp * fibDir[2];
+          fp[0] += (ff[0] + Math.sin(g / 520) * 1.1) * 2 * Math.PI / fs;
+          fp[1] += (ff[1] + Math.sin(g / 370 + 1) * 1.4) * 2 * Math.PI / fs;
+          fp[2] += (ff[2] + Math.sin(g / 290 + 2) * 1.2) * 2 * Math.PI / fs;
+          var fv = (Math.sin(fp[0]) + 0.7 * Math.sin(fp[1]) + 0.45 * Math.sin(fp[2])) *
+            famp * (0.75 + 0.35 * Math.sin(g / 640 + 0.5));
+          buf.vx[g] += fv * fibDir[0];
+          buf.vy[g] += fv * fibDir[1];
+          buf.vz[g] += fv * fibDir[2];
         }
       }
 
@@ -2470,9 +2787,13 @@ window.EKG = window.EKG || {};
     if (patternNames[cfg.pattern]) lines.push(patternNames[cfg.pattern]);
 
     /* QTc flag. Meaningless in a wide complex or chaotic rhythm — repolarisation
-     * is abnormal by definition there — so it is only reported when the
-     * measurement actually says something. */
-    if (meas.qtc && meas.qtc > 480 && stReadable) lines.push('PROLONGED QTc INTERVAL');
+     * is abnormal by definition there, and a bundle branch block lengthens the
+     * QT by widening the QRS — so it is only reported when the measurement
+     * actually says something, and not twice when the pattern already says it. */
+    var qtAlreadyNamed = cfg.pattern === 'hypocalcemia' || cfg.pattern === 'lqts';
+    if (meas.qtc && meas.qtc > 480 && stReadable && meas.qrs < 120 && !qtAlreadyNamed) {
+      lines.push('PROLONGED QTc INTERVAL');
+    }
 
     // --- artifact
     var artifactNames = {
@@ -2934,7 +3255,7 @@ window.EKG = window.EKG || {};
     P('Hypokalemia with U waves', 'Metabolic & tox', { rhythm: 'sinus', rate: 78, pattern: 'hypok' }),
     P('Hypocalcemia (long QT)', 'Metabolic & tox', { rhythm: 'sinus', rate: 70, pattern: 'hypocalcemia' }),
     P('Digoxin effect', 'Metabolic & tox', { rhythm: 'afib', rate: 64, pattern: 'digoxin' }),
-    P('Tricyclic overdose', 'Metabolic & tox', { rhythm: 'sinus_tach', rate: 128, pattern: 'tca', axis: 'rad' },
+    P('Tricyclic overdose', 'Metabolic & tox', { rhythm: 'sinus_tach', rate: 128, pattern: 'tca' },
       'Wide QRS, tachycardia, and a terminal R wave in aVR. Sodium bicarbonate, not amiodarone.'),
     P('Hypothermia with Osborn waves', 'Metabolic & tox', { rhythm: 'sinus_brady', rate: 38, pattern: 'hypothermia', artifact: 'tremor' }),
 
@@ -2999,6 +3320,707 @@ window.EKG = window.EKG || {};
     labelFor: labelFor,
     findField: findField,
     fromPreset: fromPreset
+  };
+})(window.EKG);
+
+
+/* ===== assets/js/treatment.js ===== */
+/* treatment.js — what to DO about the tracing.
+ *
+ * Every rhythm, block, infarct pattern and metabolic pattern the generator
+ * can draw has its own management entry here: the prehospital steps a
+ * paramedic takes, with adult drug doses, and a line on definitive hospital
+ * care. explain.js stitches together the entries that apply to the case on
+ * screen, most time-critical first.
+ *
+ * Basis: American Heart Association adult ACLS (2020 guidelines and the 2025
+ * update) and the 2025 ACC/AHA/ACEP/NAEMSP/SCAI acute coronary syndromes
+ * guideline. Adult doses only. This is teaching material -- the reader's own
+ * medical direction and local protocol always win, and the text says so.
+ *
+ * An entry is { title, field: [steps], hospital: 'one line', priority }.
+ * Lower priority numbers are listed first.
+ */
+window.EKG = window.EKG || {};
+(function (EKG) {
+  'use strict';
+
+  /* ---- building blocks quoted in more than one entry ------------------ */
+
+  var CARDIOVERT = 'Synchronized cardioversion, with sedation first if the patient is conscious and time allows (e.g. midazolam 1-2 mg IV or etomidate 0.1-0.15 mg/kg per protocol).';
+  var BRADY_DRUGS = 'Atropine 1 mg IV push, repeated every 3-5 minutes to a maximum of 3 mg.';
+  var BRADY_NEXT = 'If atropine fails: transcutaneous pacing (set the rate to 60-80/min, raise the current until every spike captures, then confirm a pulse with each paced beat; give analgesia or sedation) and/or an infusion of epinephrine 2-10 mcg/min or dopamine 5-20 mcg/kg/min.';
+  var ARREST = 'High-quality CPR with minimal interruptions, epinephrine 1 mg IV/IO every 3-5 minutes, an advanced airway with waveform capnography, and a search for reversible causes (the Hs and Ts).';
+  var SHOCK = 'Defibrillate immediately at the manufacturer\'s dose (biphasic 120-200 J; if unknown use the maximum), resume CPR at once for 2 minutes, then reassess. Shock every 2 minutes while the rhythm stays shockable.';
+  var ACS_BASE = 'Aspirin 162-324 mg, non-enteric, chewed - unless truly allergic or actively bleeding.';
+  var NITRO = 'Nitroglycerin 0.4 mg sublingual every 5 minutes, up to 3 doses, for ongoing ischaemic pain - only if systolic BP is at least 90 mmHg (and not more than 30 mmHg below baseline), there is no right ventricular infarct, and no phosphodiesterase inhibitor has been taken (sildenafil or vardenafil within 24 hours, tadalafil within 48 hours).';
+  var OXYGEN = 'Oxygen only if SpO2 is below 90%, or the patient is short of breath or in heart failure; titrate, do not give it routinely.';
+  var PAIN = 'Pain not relieved by nitroglycerin: fentanyl 25-50 mcg IV (or morphine 2-4 mg IV), repeated cautiously while watching the blood pressure.';
+
+  function entry(title, field, hospital, priority) {
+    return { title: title, field: field, hospital: hospital || '', priority: priority === undefined ? 50 : priority };
+  }
+
+  /* ----------------------------------------------------------- rhythms */
+
+  function rhythmEntry(cfg, m) {
+    var hr = m.hr;
+    switch (cfg.rhythm) {
+      case 'vfib':
+        return entry('Ventricular fibrillation - cardiac arrest', [
+          'Confirm unresponsive and pulseless, start compressions, and get the pads on. Nothing else matters until the first shock is delivered.',
+          SHOCK,
+          'After the 2nd shock: epinephrine 1 mg IV/IO, repeated every 3-5 minutes.',
+          'After the 3rd shock: amiodarone 300 mg IV/IO bolus (a second dose of 150 mg may follow), OR lidocaine 1-1.5 mg/kg (then 0.5-0.75 mg/kg).',
+          'Refractory VF: change the pad position (anterior-posterior), look for and treat reversible causes, and consider early transport for ECMO-capable or cath-lab care where your system supports it.',
+          'After return of circulation: 12-lead ECG, keep SpO2 90-98% and systolic BP at least 90 mmHg (MAP 65 or more), avoid hyperventilation, and begin temperature control per protocol.'
+        ], 'Coronary angiography if the post-arrest ECG shows STEMI or the cause is thought to be cardiac; targeted temperature management; ICD before discharge if no reversible cause is found.', 1);
+
+      case 'asystole':
+        return entry('Asystole - cardiac arrest', [
+          'Check the patient, then check the monitor: confirm in a second lead, check the leads and gain, and make sure this is not fine VF.',
+          'Asystole is NOT a shockable rhythm. ' + ARREST,
+          'Work the reversible causes hard, because they are the only route to a pulse: hypoxia, hypovolaemia, hyperkalaemia, hydrogen ion (acidosis), hypothermia, tension pneumothorax, tamponade, toxins, thrombosis (coronary or pulmonary).',
+          'Atropine and pacing are no longer recommended for asystole.',
+          'Consider termination of resuscitation per your protocol when asystole persists despite good ALS and no reversible cause is found (a persistently low end-tidal CO2, below 10 mmHg after 20 minutes, supports that decision).'
+        ], 'Post-arrest care if circulation returns. Outcome depends almost entirely on finding a reversible cause.', 1);
+
+      case 'vtach':
+        return entry('Monomorphic ventricular tachycardia', [
+          'First question: is there a pulse? **No pulse** - treat exactly as VF: CPR, immediate unsynchronized defibrillation, epinephrine 1 mg every 3-5 minutes, amiodarone 300 mg (then 150 mg) or lidocaine 1-1.5 mg/kg.',
+          '**Pulse but unstable** (hypotension, altered mental status, shock, ischaemic chest pain, acute heart failure): ' + CARDIOVERT + ' Use the manufacturer\'s recommended energy - traditionally 100 J biphasic to start, escalating - and the maximum setting if you do not know it.',
+          '**Pulse and stable:** 12-lead ECG, IV access, and an antiarrhythmic - amiodarone 150 mg IV over 10 minutes (repeat as needed, then 1 mg/min for 6 hours), OR procainamide 20-50 mg/min until the rhythm breaks, hypotension develops, the QRS widens by more than 50%, or 17 mg/kg has been given (avoid in heart failure or a long QT), OR sotalol 1.5 mg/kg (about 100 mg) IV over 5 minutes (avoid in a long QT).',
+          'Do not give verapamil or diltiazem for a wide-complex tachycardia of uncertain origin - it can cause collapse if the rhythm is VT. Adenosine 6 mg may be tried only when the rhythm is regular and monomorphic and the diagnosis is in doubt.',
+          'Be ready to cardiovert the moment a stable patient stops being stable.'
+        ], 'Treat ischaemia and correct potassium and magnesium; echocardiography; electrophysiology study, catheter ablation and/or an ICD.', 2);
+
+      case 'polymorphic_vt':
+        return entry('Polymorphic VT / torsades de pointes', [
+          '**Pulseless or unstable:** unsynchronized defibrillation at the full defibrillation dose - the monitor cannot synchronize to a rhythm whose axis keeps changing. Follow with CPR and the cardiac arrest algorithm if there is no pulse.',
+          '**Magnesium sulfate 1-2 g IV** - diluted and given over about 15 minutes if there is a pulse, as a push over 1-2 minutes in arrest. It is the first-line drug for torsades even when the serum magnesium is normal.',
+          'Torsades usually comes in bursts that stop on their own and return. Between bursts, look at the QT in the sinus beats and stop every QT-prolonging drug (ondansetron, haloperidol, droperidol, methadone, macrolides, fluoroquinolones and others).',
+          'Avoid amiodarone, procainamide and sotalol when the QT is long - they prolong it further.',
+          'If the baseline QT is NOT prolonged, polymorphic VT is most often acute ischaemia: treat as an acute coronary syndrome, and amiodarone or a beta blocker is then appropriate.'
+        ], 'Potassium replaced to 4.5-5.0 mEq/L, magnesium infusion, and overdrive pacing or an isoproterenol infusion to keep the rate above about 90-100/min, which shortens the QT and suppresses recurrence.', 2);
+
+      case 'idioventricular':
+        return entry('Idioventricular (ventricular escape) rhythm', [
+          'This is the heart\'s last-ditch pacemaker. **Never suppress it** - lidocaine or amiodarone can abolish the only rhythm the patient has and leave asystole.',
+          'Check for a pulse. No pulse is PEA: start CPR and work the Hs and Ts.',
+          'With a pulse and poor perfusion, treat it as a symptomatic bradycardia: ' + BRADY_DRUGS + ' It often fails because the escape focus is below the reach of the vagus.',
+          BRADY_NEXT,
+          'Look for the cause: complete heart block, inferior or large anterior infarction, hyperkalaemia, drug toxicity (beta blockers, calcium channel blockers, digoxin), profound hypoxia.'
+        ], 'Transvenous pacing, treatment of the cause, and usually a permanent pacemaker.', 4);
+
+      case 'aivr':
+        return entry('Accelerated idioventricular rhythm (AIVR)', [
+          'Usually a benign, self-limiting rhythm - classically seen in the first minutes after a blocked coronary artery reopens (after fibrinolysis, during PCI, or spontaneously). It is often good news.',
+          '**Do not treat it with antiarrhythmics.** It is not VT, it rarely degenerates, and suppressing a ventricular focus can leave the patient with a slower rhythm or none.',
+          'Assess perfusion and observe. If the loss of atrial kick drops the blood pressure, atropine 1 mg IV to speed the sinus node above the ventricular focus is the usual answer.',
+          'Record a 12-lead once sinus rhythm returns and treat the underlying infarct or cause (digoxin toxicity, electrolytes, cocaine).'
+        ], 'Observation, and completion of reperfusion therapy for the infarct that produced it.', 20);
+
+      case 'afib':
+      case 'afib_slow':
+      case 'afib_rvr':
+        if (hr > 100) {
+          return entry('Atrial fibrillation with rapid ventricular response', [
+            '**Unstable because of the rate** (usually well above 150 with hypotension, shock, ischaemic pain or pulmonary oedema): ' + CARDIOVERT + ' The 2025 AHA guidelines call a first biphasic shock of at least 200 J reasonable for atrial fibrillation, escalating if it fails.',
+            'Ask why the rate is fast before treating the number. Sepsis, hypovolaemia, bleeding, pulmonary embolism, hypoxia and pain all drive AF fast - treat those, and the rate follows. Slowing a compensatory tachycardia can make the patient worse.',
+            '**Stable - rate control:** diltiazem 0.25 mg/kg IV (15-20 mg) over 2 minutes; if needed after 15 minutes, 0.35 mg/kg (20-25 mg); then 5-15 mg/hour. OR metoprolol 5 mg IV over 2 minutes, repeated every 5 minutes to a total of 15 mg.',
+            'Avoid diltiazem and verapamil in decompensated heart failure or a known low ejection fraction; amiodarone 150 mg IV over 10 minutes is the usual alternative.',
+            '**Wide, bizarre and irregular at 200 or more is pre-excited AF (WPW).** No adenosine, no calcium channel blocker, no beta blocker, no digoxin - they can drive conduction down the accessory pathway into VF. Use procainamide (20-50 mg/min, maximum 17 mg/kg) or cardiovert.',
+            'Note when the AF started. Beyond 48 hours (or unknown) there may be clot in the left atrium, so elective cardioversion waits for anticoagulation or a transoesophageal echo - but never delay an emergency cardioversion for that reason.'
+          ], 'Anticoagulation guided by the CHA2DS2-VASc score, a rate- or rhythm-control strategy, and in selected patients cardioversion or catheter ablation.', 10);
+        }
+        return entry('Atrial fibrillation, controlled rate', [
+          'No emergency rhythm treatment is needed when the ventricular rate is under about 100-110 and the patient is perfusing. Treat whatever they actually called for.',
+          'Ask about anticoagulants and rate-control drugs - missed doses explain a rate that climbs later, and an anticoagulated patient changes how you treat trauma and stroke.',
+          'New neurological deficit in a patient with AF is a stroke until proven otherwise: note the last-known-well time and go to a stroke centre.',
+          'A slow, REGULAR ventricular rhythm in a patient with AF is not controlled AF - it is complete heart block with an escape rhythm, and should make you think of digoxin toxicity.'
+        ], 'Stroke-risk assessment and anticoagulation, and long-term rate or rhythm control.', 40);
+
+      case 'aflutter':
+        return entry('Atrial flutter', [
+          'Managed like atrial fibrillation, with one useful difference: flutter is an organized circuit and converts very easily with electricity.',
+          '**Unstable:** ' + CARDIOVERT + ' Flutter often converts at 50-100 J; the 2025 AHA guidelines also accept starting at 200 J to make the first shock count.',
+          '**Stable with a fast rate:** diltiazem 0.25 mg/kg IV (15-20 mg) over 2 minutes, repeat 0.35 mg/kg after 15 minutes if needed; OR metoprolol 5 mg IV every 5 minutes up to 15 mg. Rate control is harder than in AF - the rate tends to step down (150 to 100 to 75) rather than slow smoothly.',
+          'Adenosine will not terminate flutter. It briefly blocks the AV node and exposes the flutter waves, which is diagnostic, not therapeutic.',
+          'The stroke risk is the same as in atrial fibrillation, so the same 48-hour and anticoagulation rules apply.'
+        ], 'Anticoagulation as for AF; catheter ablation of the cavotricuspid isthmus cures typical flutter in more than 90% of patients.', 12);
+
+      case 'svt':
+        return entry('Supraventricular tachycardia (AVNRT / AVRT)', [
+          '**Unstable:** ' + CARDIOVERT + ' Use your device\'s recommended energy; a regular narrow rhythm traditionally converts at 50-100 J biphasic.',
+          '**Stable - vagal manoeuvres first.** The modified Valsalva works best: blow into a 10 mL syringe for 15 seconds sitting up, then immediately lie flat with the legs raised to 45 degrees. It converts roughly 40% of patients.',
+          '**Adenosine 6 mg rapid IV push** into a large proximal vein, followed at once by a 20 mL saline flush. No conversion in 1-2 minutes: **12 mg** (some protocols allow that dose to be repeated once). Warn the patient about the few seconds of chest tightness and impending doom, and run a strip while you push.',
+          'Halve the adenosine dose (3 mg) if given through a central line, or in patients taking dipyridamole or carbamazepine or with a transplanted heart. Avoid it in severe asthma.',
+          'If adenosine fails or the rhythm keeps returning: diltiazem 0.25 mg/kg IV (15-20 mg) over 2 minutes, or metoprolol 5 mg IV every 5 minutes up to 15 mg.',
+          'Record a 12-lead after conversion and look for a short PR and a delta wave (WPW).'
+        ], 'Usually discharged after conversion; recurrent episodes are cured by catheter ablation.', 12);
+
+      case 'atach':
+        return entry('Atrial tachycardia', [
+          'An ectopic atrial focus, so it behaves differently from re-entrant SVT: vagal manoeuvres and adenosine (6 mg, then 12 mg) may stop it, but more often only slow the ventricles for a few seconds and show the abnormal P waves marching on.',
+          '**Unstable:** ' + CARDIOVERT,
+          '**Stable:** rate control with diltiazem 0.25 mg/kg IV (15-20 mg) over 2 minutes or metoprolol 5 mg IV every 5 minutes up to 15 mg.',
+          'Atrial tachycardia WITH AV block is the classic rhythm of digoxin toxicity. If the patient takes digoxin, do not cardiovert unless they are dying, check the potassium, and tell the hospital.',
+          'Look for a driver: stimulants, theophylline, hypoxia, electrolyte disturbance, structural heart disease.'
+        ], 'Treatment of the cause, a beta blocker or calcium channel blocker, and ablation for incessant tachycardia. Digoxin-specific antibody fragments if digoxin is responsible.', 14);
+
+      case 'mat':
+        return entry('Multifocal atrial tachycardia', [
+          '**Treat the lungs, not the rhythm.** MAT is a marker of severe underlying illness - most often a COPD exacerbation or hypoxia - and it settles when that is treated.',
+          'Titrated oxygen (88-92% in COPD), bronchodilators, CPAP or BiPAP if indicated, and treatment of the infection or heart failure behind it.',
+          'Cardioversion does not work and adenosine does not work - there is no re-entry circuit to break. Do not mistake it for atrial fibrillation: there ARE P waves, at least three different shapes of them.',
+          'Magnesium sulfate 2 g IV over 15-20 minutes is reasonable and safe. Correct a low potassium.',
+          'Theophylline toxicity is a classic cause.'
+        ], 'Correction of hypoxia, potassium and magnesium. If the rate itself needs slowing, verapamil or diltiazem is preferred; beta blockers are used cautiously in bronchospasm.', 30);
+
+      case 'wandering':
+        return entry('Wandering atrial pacemaker', [
+          'A benign rhythm - the dominant pacemaker is shifting between the sinus node and other atrial sites, usually from high vagal tone. It is common in athletes, in the young, and during sleep.',
+          'No treatment. It is the slow cousin of multifocal atrial tachycardia (same changing P waves, rate under 100) and needs attention only if it is a clue to lung disease or digoxin excess.'
+        ], 'None needed.', 80);
+
+      case 'junctional':
+        return entry('Junctional escape rhythm', [
+          'The AV junction has taken over because the sinus node is failing or its impulses are not getting through. The escape rhythm is protective - do not suppress it.',
+          'Stable and perfusing: monitor, 12-lead, IV access, and look for the cause.',
+          'Symptomatic (hypotension, altered mental status, chest pain, shock): ' + BRADY_DRUGS + ' A junctional focus usually responds.',
+          BRADY_NEXT,
+          'Causes to ask about: beta blockers, calcium channel blockers, digoxin, clonidine, inferior MI, hyperkalaemia, hypothermia, hypothyroidism, sick sinus syndrome.'
+        ], 'Stop the offending drug, treat the cause; a permanent pacemaker if sinus node disease persists.', 30);
+
+      case 'accel_junctional':
+        return entry('Accelerated junctional rhythm', [
+          'The rate is adequate, so the rhythm itself rarely needs treatment. What matters is why the junction is irritable.',
+          'Classic causes: **digoxin toxicity**, inferior myocardial infarction, myocarditis, recent cardiac surgery, and excess catecholamines.',
+          'Get a 12-lead, look for an infarct, and take a careful medication history. If digoxin toxicity is possible, avoid cardioversion and report it.'
+        ], 'Treatment of the cause; digoxin-specific antibody fragments for digoxin toxicity.', 45);
+
+      case 'junctional_tach':
+        return entry('Junctional tachycardia', [
+          'Enhanced automaticity in the AV junction - uncommon in adults, and it should make you think of digoxin toxicity, myocardial ischaemia, myocarditis, or stimulant use.',
+          'Electrical cardioversion is usually ineffective (it is not a re-entry rhythm) and is dangerous in digoxin toxicity.',
+          'If the rate is causing symptoms: a beta blocker (metoprolol 5 mg IV every 5 minutes up to 15 mg) or diltiazem 0.25 mg/kg IV, provided the blood pressure allows. Amiodarone 150 mg over 10 minutes is the alternative.',
+          'Treat the cause above all.'
+        ], 'Digoxin-specific antibody fragments where indicated; otherwise beta blockade and treatment of the underlying disease.', 20);
+
+      case 'sinus_tach':
+        return entry('Sinus tachycardia', [
+          '**Sinus tachycardia is a vital sign, not a rhythm disorder. Find the reason and treat that.** Never slow it with a beta blocker or calcium channel blocker for its own sake - the rate may be the only thing maintaining cardiac output.',
+          'Work through the causes: hypovolaemia or bleeding, sepsis and fever, hypoxia, pain and anxiety, pulmonary embolism, heart failure, anaemia, hypoglycaemia, hyperthyroidism, stimulants and anticholinergics, alcohol or benzodiazepine withdrawal.',
+          'Treat accordingly: oxygen if hypoxic, fluid for hypovolaemia (20-30 mL/kg for septic shock per protocol), analgesia, antipyretics, glucose.',
+          'At rates above about 150 in an adult, reconsider the diagnosis - look for flutter waves and consider SVT. The maximum sinus rate is roughly 220 minus age.'
+        ], 'Diagnosis and treatment of the underlying cause.', 60);
+
+      case 'sinus_brady':
+        return entry('Sinus bradycardia', [
+          'Treat the patient, not the number. A fit person at 45/min who is warm, alert and normotensive needs nothing.',
+          'Treat only when the rate is causing poor perfusion: hypotension, altered mental status, signs of shock, ischaemic chest pain, or acute heart failure.',
+          'Then: ' + BRADY_DRUGS,
+          BRADY_NEXT,
+          'Look for the cause: beta blockers, calcium channel blockers, digoxin, clonidine, opioids; inferior MI; hypoxia; hypothermia; raised intracranial pressure (Cushing\'s response); hypothyroidism; hyperkalaemia.',
+          'Beta blocker or calcium channel blocker overdose needs more than atropine - calcium, glucagon (beta blocker) and high-dose insulin are hospital therapies worth an early alert.'
+        ], 'Treatment of the cause; permanent pacing for symptomatic sinus node dysfunction.', 40);
+
+      case 'sinus_arrhythmia':
+        return entry('Sinus arrhythmia', [
+          'Normal. The rate speeds up on inspiration and slows on expiration because breathing changes vagal tone. It is most marked in the young and fit and is a sign of a healthy autonomic system.',
+          'No treatment. The only task is not to mistake it for atrial fibrillation - every beat has the same P wave in front of it.'
+        ], 'None needed.', 90);
+
+      default:
+        return entry('Normal sinus rhythm', [
+          'The rhythm needs no treatment. Manage whatever brought you to the patient.',
+          'A normal rhythm - and a normal 12-lead - does not exclude an acute coronary syndrome, pulmonary embolism or aortic dissection. If the story is worrying, repeat the 12-lead every 5-10 minutes and whenever symptoms change.'
+        ], '', 95);
+    }
+  }
+
+  /* ---------------------------------------------------------- AV block */
+
+  function blockEntry(cfg) {
+    switch (cfg.avblock) {
+      case 'first':
+        return entry('First-degree AV block', [
+          'No treatment - every impulse still reaches the ventricles.',
+          'Note it, because it changes what you give next: be cautious with anything else that slows the AV node (beta blockers, diltiazem, verapamil, digoxin, amiodarone, adenosine).',
+          'A new long PR with chest pain suggests inferior ischaemia; with fever and a new murmur it suggests an aortic root abscess.'
+        ], 'Review of AV-nodal drugs. No pacing unless it progresses.', 70);
+      case 'mobitz1':
+        return entry('Second-degree AV block, Mobitz I (Wenckebach)', [
+          'The block is inside the AV node and is usually benign and transient. Most patients need monitoring only.',
+          'If the dropped beats are causing symptoms: ' + BRADY_DRUGS + ' Because the block is nodal, atropine usually works.',
+          'Common causes: inferior MI (RCA territory), high vagal tone in athletes and during sleep, and AV-nodal drugs.',
+          'It rarely progresses to complete block and rarely needs pacing - the opposite of Mobitz II.'
+        ], 'Observation and treatment of the cause. Pacemaker only for persistent symptoms.', 45);
+      case 'mobitz2':
+      case 'twotoone':
+        return entry(cfg.avblock === 'twotoone' ? '2:1 AV block' : 'Second-degree AV block, Mobitz II', [
+          '**Put the pacing pads on now, before the patient needs them.** The block is below the AV node, in the His-Purkinje system, and it can become complete heart block or asystole without warning.',
+          'Symptomatic: go to transcutaneous pacing early - set 60-80/min, increase the current until every spike captures, confirm a femoral pulse with each paced beat, and give analgesia or sedation (fentanyl 25-50 mcg and/or midazolam 1-2 mg IV).',
+          'Atropine 1 mg IV may be tried but is often ineffective and can worsen the conduction ratio by speeding the atria. Do not delay pacing for it.',
+          'If pacing fails to capture or is not tolerated: epinephrine 2-10 mcg/min or dopamine 5-20 mcg/kg/min.',
+          cfg.avblock === 'twotoone'
+            ? '2:1 block cannot be labelled Mobitz I or II from the pattern alone, because you never see two conducted beats in a row. A wide QRS means assume it is infranodal (Mobitz II) and treat it that way.'
+            : 'A new Mobitz II with chest pain points to a large anterior infarct - treat as an acute coronary syndrome and expect deterioration.'
+        ], 'Transvenous pacing, then a permanent pacemaker in almost every case.', 6);
+      case 'third':
+        return entry('Third-degree (complete) AV block', [
+          '**Pads on, and pace if there is any sign of poor perfusion.** Transcutaneous pacing at 60-80/min; raise the current until every spike is followed by a wide QRS, then confirm mechanical capture with a pulse. Sedate and treat pain.',
+          cfg.escapeSite === 'ventricular'
+            ? 'A wide ventricular escape rhythm is slow and unreliable and will not respond to atropine. Do not waste time on it - pace, or start epinephrine 2-10 mcg/min or dopamine 5-20 mcg/kg/min.'
+            : 'With a narrow junctional escape the block is at the AV node: atropine 1 mg IV (every 3-5 minutes to 3 mg) is reasonable while the pacer is prepared, and sometimes works.',
+          'Never give lidocaine or amiodarone to "treat the wide beats" - they are the escape rhythm keeping the patient alive.',
+          'Acquire a 12-lead looking for an infarct (inferior MI gives nodal block that often recovers; anterior MI gives infranodal block with a poor prognosis). Consider hyperkalaemia and AV-nodal drug toxicity.'
+        ], 'Transvenous pacing and a permanent dual-chamber pacemaker, unless a reversible cause (inferior MI, drugs, hyperkalaemia, Lyme disease) is corrected.', 5);
+    }
+    return null;
+  }
+
+  /* ------------------------------------------------------------ ectopy */
+
+  function ectopyEntry(cfg) {
+    switch (cfg.ectopy) {
+      case 'pac':
+      case 'pjc':
+        return entry(cfg.ectopy === 'pac' ? 'Premature atrial complexes' : 'Premature junctional complexes', [
+          'Benign and common. No treatment.',
+          'Frequent ones are driven by caffeine, nicotine, alcohol, stimulants, stress, sleep loss, hypoxia or low potassium - address those. In a patient with lung disease or heart failure they can herald atrial fibrillation.'
+        ], 'None needed.', 85);
+      case 'pvc_uni':
+      case 'pvc_multi':
+      case 'bigeminy':
+      case 'trigeminy':
+      case 'couplet':
+        return entry('Premature ventricular complexes', [
+          '**Do not suppress PVCs with antiarrhythmics.** Treating ectopy for its own sake does not prevent arrest, and suppressing it after an infarct has been shown to increase mortality.',
+          'Treat what is irritating the ventricle: hypoxia (oxygen if SpO2 is under 90%), ischaemia (12-lead, treat as ACS if it fits), pain, low potassium or magnesium, and stimulants (cocaine, amphetamines, caffeine) or digoxin toxicity.',
+          cfg.ectopy === 'bigeminy'
+            ? 'In bigeminy, check a pulse against the monitor: PVCs often do not generate a pulse, so the effective heart rate may be HALF what the monitor counts - a functional bradycardia.'
+            : 'Multifocal PVCs, couplets, and PVCs landing on the preceding T wave (R-on-T) mean a more irritable ventricle: keep the pads within reach and look harder for a cause.',
+          'Healthy people have isolated unifocal PVCs. In the absence of symptoms or heart disease they need nothing.'
+        ], 'Electrolyte correction; an echocardiogram if frequent; beta blockers or ablation for a very high PVC burden.', 50);
+      case 'nsvt':
+        return entry('Non-sustained ventricular tachycardia', [
+          'A run of three or more ventricular beats lasting under 30 seconds. It needs no shock and no bolus if it stops on its own - but it is a warning.',
+          'Apply the pads, get a 12-lead, establish IV access, and look for ischaemia, low potassium, low magnesium, a long QT, and stimulant or drug toxicity.',
+          'Recurrent runs with symptoms: amiodarone 150 mg IV over 10 minutes per protocol. Magnesium sulfate 2 g IV if the QT is long or the runs are polymorphic.',
+          'If it sustains, manage it as ventricular tachycardia.'
+        ], 'Potassium kept above 4.0 mEq/L and magnesium above 2.0 mg/dL, evaluation for coronary and structural heart disease, and consideration of a beta blocker or ICD.', 15);
+    }
+    return null;
+  }
+
+  /* -------------------------------------------------------- conduction */
+
+  function conductionEntry(cfg) {
+    switch (cfg.ivcd) {
+      case 'rbbb':
+        return entry('Right bundle branch block', [
+          'No treatment for the block itself; it is found in many healthy hearts.',
+          'ST elevation is still readable in RBBB - it does not hide a STEMI the way LBBB does.',
+          'A NEW RBBB matters in two settings: with chest pain it suggests a proximal LAD occlusion, and with sudden breathlessness it suggests a large pulmonary embolism.'
+        ], 'None for an isolated chronic RBBB.', 75);
+      case 'lbbb':
+        return entry('Left bundle branch block', [
+          'No treatment for the block itself, but it always signals underlying heart disease.',
+          '**LBBB alone - even new or presumed new - is no longer a reason to activate the cath lab.** Apply the modified Sgarbossa criteria: concordant ST elevation of 1 mm or more, concordant ST depression of 1 mm or more in V1-V3, or discordant ST elevation exceeding 25% of the preceding S wave. Any one, with ischaemic symptoms, is treated as a STEMI.',
+          'A patient with LBBB who is unstable from a suspected infarct (shock, acute heart failure) should go for emergency angiography regardless.',
+          'Compare with an old ECG whenever one exists.'
+        ], 'Echocardiography; cardiac resynchronization therapy if the ejection fraction is low.', 55);
+      case 'lafb':
+      case 'lpfb':
+        return entry(cfg.ivcd === 'lafb' ? 'Left anterior fascicular block' : 'Left posterior fascicular block', [
+          'No treatment. An isolated fascicular block does not cause symptoms.',
+          cfg.ivcd === 'lpfb'
+            ? 'LPFB is a diagnosis of exclusion - rule out right ventricular strain (pulmonary embolism), lateral infarction and a vertical heart first.'
+            : 'It matters mainly as a building block: combined with RBBB it is bifascicular block.'
+        ], 'None needed.', 80);
+      case 'bifascicular':
+        return entry('Bifascicular block (RBBB + LAFB)', [
+          'Two of the three fascicles are blocked; the ventricles depend on the one that is left.',
+          'Asymptomatic: no treatment, but record it and avoid stacking AV-nodal blocking drugs.',
+          '**Syncope or near-syncope with bifascicular block is intermittent complete heart block until proven otherwise.** Apply pacing pads, monitor continuously, and transport.',
+          'A long PR interval added to this ("trifascicular block") means the last fascicle is also diseased.'
+        ], 'Pacemaker for syncope, alternating bundle branch block, or documented high-grade AV block.', 35);
+      case 'ivcd':
+        return entry('Nonspecific intraventricular conduction delay', [
+          'A wide QRS that is not a bundle branch block has a short list of dangerous causes. **Think hyperkalaemia first** (renal failure, missed dialysis, crush injury) and sodium-channel blocker poisoning second (tricyclics, diphenhydramine, cocaine, flecainide).',
+          'If either fits: calcium for hyperkalaemia, sodium bicarbonate 1-2 mEq/kg IV for sodium-channel blockade - see the specific entries.',
+          'Otherwise it reflects diseased ventricular muscle and needs no acute treatment.'
+        ], 'Electrolytes, toxicology and echocardiography.', 40);
+      case 'wpw':
+        return entry('Wolff-Parkinson-White pattern', [
+          'In sinus rhythm with no symptoms, the pattern needs no treatment. Record it clearly - it changes how every future tachycardia in this patient is managed.',
+          '**Regular narrow tachycardia** (orthodromic AVRT, the commonest): treat like any SVT - vagal manoeuvres, then adenosine 6 mg and 12 mg. Have the defibrillator ready, since adenosine can occasionally trigger AF.',
+          '**Fast, irregular, wide and bizarre (pre-excited atrial fibrillation): avoid every AV-nodal blocker** - adenosine, diltiazem, verapamil, beta blockers and digoxin. Blocking the node sends more impulses down the accessory pathway and can cause VF. Amiodarone IV is also best avoided.',
+          'For pre-excited AF: unstable - synchronized cardioversion; stable - procainamide 20-50 mg/min IV (maximum 17 mg/kg), or cardiovert.'
+        ], 'Electrophysiology study and catheter ablation of the accessory pathway, which is curative.', 30);
+    }
+    return null;
+  }
+
+  /* ------------------------------------------------------------ pacing */
+
+  function pacingEntry(cfg) {
+    switch (cfg.pacing) {
+      case 'failure_capture':
+        return entry('Pacemaker failure to capture', [
+          '**Treat the patient\'s own rhythm, not the spikes.** If the underlying rhythm is perfusing, monitor and transport. If it is a symptomatic bradycardia, treat it as one.',
+          'Transcutaneous pacing: place the pads anterior-posterior and at least 8 cm (3 inches) away from the pulse generator; expect to need a higher current than usual. Atropine 1 mg IV and epinephrine 2-10 mcg/min are the bridges.',
+          'Reversible causes that raise the capture threshold: **hyperkalaemia**, acute infarction at the lead tip, acidosis, hypoxia, and drugs such as flecainide. Mechanical causes: lead displacement or fracture (recent implant, trauma, "twiddling"), and battery depletion.',
+          'A magnet will not help - it only switches the device to fixed-rate pacing, and the pulses still will not capture.'
+        ], 'Device interrogation, chest X-ray for lead position, electrolytes; lead revision or generator replacement.', 8);
+      case 'failure_sense':
+        return entry('Pacemaker failure to sense (undersensing)', [
+          'The device cannot see the patient\'s own beats, so it fires regardless - and a spike landing on a T wave can trigger VT or VF. Keep the defibrillator pads on.',
+          'If the patient is stable, monitor continuously and transport for interrogation.',
+          'Look for causes: lead displacement or fracture, a new bundle branch block or infarct changing the signal the lead sees, electrolyte disturbance, and battery depletion.',
+          'If R-on-T induces VT or VF, treat it by the standard algorithm; pads go anterior-posterior, away from the generator.'
+        ], 'Device interrogation and reprogramming of sensitivity, or lead revision.', 18);
+      case 'none':
+      case undefined:
+        return null;
+      default:
+        return entry('Paced rhythm, functioning normally', [
+          'A normally functioning pacemaker needs no treatment. Confirm that every spike captures and that each captured beat produces a pulse.',
+          '**A paced rhythm hides a STEMI the same way LBBB does.** With ischaemic symptoms, apply the modified Sgarbossa criteria and treat the story, not just the tracing.',
+          'If defibrillation, cardioversion or external pacing is ever needed, keep the pads at least 8 cm (3 inches) from the generator - anterior-posterior is best.',
+          'Record the device type and, if the patient has it, the device identification card.'
+        ], 'Routine device follow-up.', 70);
+    }
+  }
+
+  /* ---------------------------------------------------------- ischaemia */
+
+  function ischemiaEntry(cfg) {
+    var t = cfg.ischemia;
+    if (!t || t === 'none') return null;
+
+    if (t === 'wellens_a' || t === 'wellens_b') {
+      return entry('Wellens syndrome - critical proximal LAD stenosis', [
+        'Treat as a high-risk acute coronary syndrome even though the patient is pain free and the troponin may be normal: this pattern precedes a large anterior infarct, often within days.',
+        ACS_BASE,
+        'Continuous monitoring with the pads within reach, IV access, and a repeat 12-lead with any return of pain - the T waves "pseudo-normalize" and then the ST segments rise when the artery re-occludes. That is now a STEMI.',
+        NITRO,
+        'Transport to a PCI-capable hospital and name the pattern at handover. **No stress testing** - it can provoke the infarct.'
+      ], 'Anticoagulation, dual antiplatelet therapy, and early coronary angiography with PCI (or bypass surgery) to the LAD.', 7);
+    }
+
+    if (t === 'de_winter') {
+      return entry('de Winter pattern - treat as an anterior STEMI', [
+        '**This is an acute proximal LAD occlusion without ST elevation. Activate the cath lab exactly as you would for a STEMI**, and say "STEMI equivalent - de Winter" when you call it in.',
+        ACS_BASE,
+        NITRO,
+        OXYGEN,
+        PAIN,
+        'Pads on, repeat the 12-lead every 5-10 minutes (it may evolve into frank ST elevation), and keep scene time short. Expect VF and pump failure.'
+      ], 'Immediate coronary angiography and primary PCI, with a P2Y12 inhibitor and heparin.', 3);
+    }
+
+    if (t === 'subendocardial') {
+      return entry('Diffuse subendocardial ischaemia (ST elevation in aVR)', [
+        'This is global supply-demand failure, not one blocked artery. **Find and fix the cause first:** a tachyarrhythmia, haemorrhage or severe anaemia, hypoxia, sepsis, severe hypertension, or aortic stenosis - correcting it may make the ECG normal again.',
+        'If no such cause is found and the story is ischaemic, treat as left main or severe three-vessel disease: ' + ACS_BASE,
+        'Nitroglycerin and opioids with great care - these patients are often preload dependent and hypotensive. Avoid them if the blood pressure is soft.',
+        OXYGEN,
+        'Persistent pain or instability despite treatment warrants urgent transport to a PCI and cardiac surgery centre with early notification.'
+      ], 'Urgent angiography. Many centres hold the P2Y12 inhibitor until the anatomy is known, because these patients often need bypass surgery.', 6);
+    }
+
+    if (cfg.stage === 'old') {
+      return entry('Old (established) myocardial infarction', [
+        'Q waves without ST elevation mark scar from a previous infarct. They are not an emergency and need no acute treatment.',
+        'Compare with a previous ECG if at all possible. Persistent ST elevation over old Q waves, months later, suggests a left ventricular aneurysm rather than a new infarct.',
+        'This is a patient with proven coronary disease: take new chest pain, breathlessness or syncope seriously, and treat as an acute coronary syndrome if the story fits, whatever this tracing shows.',
+        'Scarred ventricles generate ventricular arrhythmias and heart failure - ask about both.'
+      ], 'Secondary prevention: antiplatelet therapy, a high-intensity statin, a beta blocker, an ACE inhibitor or ARB, and an ICD if the ejection fraction is 35% or less.', 60);
+    }
+
+    var rv = t === 'inferior_rv';
+    var inferior = t === 'inferior' || rv || t === 'inferoposterior' || t === 'inferolateral';
+    var posterior = t === 'posterior' || t === 'inferoposterior' || t === 'inferolateral';
+    var anterior = t === 'anterior' || t === 'anteroseptal' || t === 'extensive_anterior' || t === 'septal' || t === 'anterolateral';
+
+    var steps = [
+      '**Time is muscle.** 12-lead within 10 minutes of first contact, transmit it, and activate the cath lab from the field. Targets: first medical contact to device 90 minutes or less (120 if a transfer is needed). Keep scene time short - many systems aim for 15 minutes or less.',
+      ACS_BASE
+    ];
+
+    if (rv) {
+      steps.push('**No nitroglycerin.** A right ventricular infarct makes the patient preload dependent; a venodilator can collapse the blood pressure. Be equally cautious with morphine.');
+      steps.push('Hypotension with clear lungs: normal saline 250-500 mL boluses, reassessed after each, up to 1-2 L. If the pressure does not respond, a vasopressor or inotrope (norepinephrine, dobutamine) is next, not more fluid.');
+    } else if (inferior) {
+      steps.push('Acquire V4R **before** nitroglycerin. If V4R shows 1 mm or more of ST elevation, treat as a right ventricular infarct: no nitrates, and fluid for hypotension.');
+      steps.push(NITRO);
+    } else {
+      steps.push(NITRO);
+    }
+
+    steps.push(OXYGEN);
+    steps.push(PAIN);
+
+    if (inferior) {
+      steps.push('Expect bradycardia and AV block (the RCA feeds the SA and AV nodes). If symptomatic: atropine 1 mg IV every 3-5 minutes to 3 mg, then pacing. Have the pads on.');
+    }
+    if (posterior) {
+      steps.push('Record posterior leads V7-V9: 0.5 mm of ST elevation there confirms it. ST depression in V1-V3 in a patient with ischaemic pain is a posterior STEMI until proven otherwise, and qualifies for reperfusion.');
+    }
+    if (anterior) {
+      steps.push('Watch for pump failure: crackles, falling blood pressure, cool skin. For pulmonary oedema with adequate pressure, CPAP and nitroglycerin; for cardiogenic shock, small fluid challenges only if the lungs are clear, then norepinephrine 0.1-0.5 mcg/kg/min titrated to a systolic BP of 90 mmHg. Avoid beta blockers in the field.');
+      steps.push('A new bundle branch block or Mobitz II block with an anterior infarct means a very large infarct - pace early, atropine will not help.');
+    }
+    if (cfg.stage === 'hyperacute') {
+      steps.push('Hyperacute T waves are the earliest sign and may not yet meet millimetre criteria. Repeat the 12-lead every 5-10 minutes; treat and transport as a STEMI and call it in as an early occlusion.');
+    }
+    if (cfg.stage === 'evolving') {
+      steps.push('Q waves and inverting T waves mean hours have passed, but reperfusion is still indicated up to 12 hours from symptom onset - and beyond that if pain, ST elevation or instability persists. Establish the time of onset carefully.');
+    }
+    if (cfg.ivcd === 'lbbb') {
+      steps.push('The concordant ST elevation here is a positive Sgarbossa criterion: this is a STEMI seen through a bundle branch block, and gets the same activation.');
+    }
+    steps.push('Pads on and repeat the 12-lead with every change in symptoms. Ventricular fibrillation is commonest in the first hour: defibrillate immediately. Reperfusion arrhythmias such as AIVR need no treatment.');
+    steps.push('If PCI cannot be reached within 120 minutes, fibrinolysis is the alternative (door- or contact-to-needle 30 minutes or less) - begin the contraindication checklist early.');
+
+    return entry('ST-elevation myocardial infarction' + (rv ? ' with right ventricular involvement' : ''), steps,
+      'Primary PCI. A P2Y12 inhibitor (ticagrelor 180 mg or prasugrel 60 mg; clopidogrel 600 mg as the alternative), anticoagulation with heparin or bivalirudin, then a high-intensity statin, a beta blocker and an ACE inhibitor once stable.', 3);
+  }
+
+  /* ------------------------------------------------- chambers / patterns */
+
+  function chamberEntry(cfg) {
+    switch (cfg.chambers) {
+      case 'lvh':
+      case 'lvh_strain':
+        return entry('Left ventricular hypertrophy', [
+          'No emergency treatment for the ECG finding. It reflects long-standing pressure load - hypertension or aortic stenosis.',
+          cfg.chambers === 'lvh_strain'
+            ? 'The strain pattern is a STEMI mimic: the ST elevation in V1-V3 is discordant and proportional to the deep S waves. But these patients have real coronary disease too - if the story is ischaemic, treat as an acute coronary syndrome and repeat the 12-lead to look for change.'
+            : 'Voltage criteria alone are common in young, thin, healthy people; interpret them with the patient in front of you.',
+          'Be cautious with nitrates and other vasodilators if severe aortic stenosis is possible (systolic murmur, exertional syncope) - the ventricle depends on its preload.',
+          'Treat a hypertensive emergency only when there is acute organ damage, per protocol.'
+        ], 'Blood pressure control and echocardiography.', 70);
+      case 'rvh':
+        return entry('Right ventricular hypertrophy', [
+          'No treatment for the ECG finding. It reflects chronic pressure load on the right heart: COPD, pulmonary hypertension, chronic thromboembolic disease, mitral stenosis, or congenital heart disease.',
+          'Treat the underlying problem. Give oxygen for hypoxaemia (target 88-92% in a chronic CO2 retainer).',
+          'These patients tolerate hypotension, hypoxia and positive-pressure ventilation badly. Avoid large fluid boluses and intubate only if unavoidable.'
+        ], 'Echocardiography and treatment of the lung or valve disease.', 70);
+      case 'lae':
+      case 'rae':
+      case 'biatrial':
+        return entry('Atrial enlargement', [
+          'No treatment. A wide notched P wave points to mitral valve disease or hypertensive heart disease and predicts atrial fibrillation; a tall peaked P wave points to lung disease and pulmonary hypertension.',
+          'Use it as a clue to the underlying condition.'
+        ], 'Echocardiography.', 85);
+    }
+    return null;
+  }
+
+  function patternEntry(cfg) {
+    switch (cfg.pattern) {
+      case 'hyperk_mild':
+      case 'hyperk_moderate':
+      case 'hyperk_severe':
+        var severe = cfg.pattern !== 'hyperk_mild';
+        return entry('Hyperkalaemia', [
+          severe
+            ? '**Calcium first, now.** Calcium chloride 10% 0.5-1 g (5-10 mL) IV over 2-5 minutes through a large, reliable vein, OR calcium gluconate 10% 1.5-3 g (15-30 mL) IV over 2-5 minutes. Watch the monitor: the QRS should narrow within minutes. Repeat after 5 minutes if it does not. The effect lasts only 30-60 minutes and does not lower the potassium.'
+            : 'Peaked T waves alone, with a normal QRS and P wave, do not yet need calcium - but they can progress within minutes. Continuous monitoring, IV access, and a low threshold to treat if the P waves flatten or the QRS widens.',
+          '**Shift potassium into cells:** albuterol 10-20 mg nebulized (four to eight standard 2.5 mg doses, continuously); sodium bicarbonate 50 mEq IV over 5 minutes, most useful when the patient is acidotic. Regular insulin 10 units IV with dextrose 25 g (50 mL of D50) where it is within scope - check glucose hourly afterwards.',
+          'Never mix calcium and bicarbonate in the same line - they precipitate. Flush between them.',
+          cfg.pattern === 'hyperk_severe'
+            ? 'A sine wave is minutes from arrest. If the patient arrests: standard CPR and defibrillation, plus calcium chloride 1 g and sodium bicarbonate 50 mEq IV push, and tell the hospital to prepare for dialysis.'
+            : 'Avoid succinylcholine if intubation is needed, and stop any potassium-containing fluid.',
+          'Ask the three questions: dialysis (when was the last session?), crush injury or prolonged immobility, and drugs (ACE inhibitors, ARBs, spironolactone, potassium supplements, trimethoprim).'
+        ], 'Insulin and dextrose, a loop diuretic if the kidneys work, a potassium binder, and emergency haemodialysis for severe or refractory cases.', severe ? 2 : 15);
+
+      case 'hypok':
+        return entry('Hypokalaemia', [
+          'Monitor continuously - a low potassium lengthens repolarization and sets up torsades de pointes and VF, especially in a patient on digoxin or with an acute coronary syndrome.',
+          'Prehospital treatment is supportive. Avoid making it worse: large doses of albuterol, insulin, and bicarbonate all drive potassium lower.',
+          'If torsades occurs: magnesium sulfate 2 g IV, and defibrillate if it sustains.',
+          'Causes to report: diuretics, vomiting and diarrhoea, DKA under treatment, alcohol use, eating disorders.'
+        ], 'Potassium chloride 10-20 mEq/hour IV with cardiac monitoring (or oral replacement if mild), and magnesium replaced first or alongside - potassium will not correct while magnesium is low.', 30);
+
+      case 'hypocalcemia':
+        return entry('Hypocalcaemia (long QT)', [
+          'Monitor for torsades de pointes and for the clinical signs: tingling round the mouth and in the fingers, muscle cramps, carpopedal spasm, laryngospasm, seizures.',
+          'Symptomatic hypocalcaemia (tetany, seizures, arrhythmia): calcium gluconate 10% 1-2 g (10-20 mL) IV over 10-20 minutes, or calcium chloride 10% 0.5-1 g by slow IV push through a large vein, per protocol.',
+          'Avoid QT-prolonging drugs (ondansetron, haloperidol, droperidol).',
+          'Typical settings: renal failure, recent thyroid or parathyroid surgery, pancreatitis, massive transfusion (citrate), hydrofluoric acid exposure.'
+        ], 'Calcium infusion, magnesium correction, and treatment of the cause.', 30);
+
+      case 'hypercalcemia':
+        return entry('Hypercalcaemia (short QT)', [
+          'The treatment is volume: these patients are profoundly dehydrated. Normal saline 500-1000 mL IV bolus, then continue per protocol, watching for fluid overload.',
+          'Symptoms are "stones, bones, groans and psychiatric overtones" - confusion, vomiting, abdominal pain, weakness, polyuria.',
+          'The commonest causes are malignancy and hyperparathyroidism. Avoid thiazide diuretics and digoxin.'
+        ], 'Aggressive saline hydration, calcitonin, an IV bisphosphonate (zoledronic acid), and dialysis if severe.', 40);
+
+      case 'digoxin':
+        return entry('Digoxin effect', [
+          'The scooped ST segments show that the patient takes digoxin, not that they are poisoned. No treatment is needed for the pattern.',
+          '**Suspect toxicity** if there is nausea and vomiting, confusion, yellow-green visual halos, or a new arrhythmia - frequent PVCs, bigeminy, atrial tachycardia with block, a slow regular rhythm in a patient with AF, or bidirectional VT.',
+          'In suspected toxicity: avoid cardioversion unless the patient is dying (use the lowest energy if you must), treat bradycardia with atropine 1 mg, and report it early so the antidote can be prepared.',
+          'Hyperkalaemia in acute digoxin poisoning reflects the severity of the poisoning and is treated with the antidote.'
+        ], 'Digoxin-specific antibody fragments (DigiFab): about 10 vials empirically for a life-threatening acute overdose, 3-6 vials for chronic toxicity. Potassium and magnesium corrected.', 45);
+
+      case 'tca':
+        return entry('Tricyclic / sodium-channel blocker toxicity', [
+          '**Sodium bicarbonate 1-2 mEq/kg IV push** (roughly 50-100 mEq, one to two ampoules of 8.4%) for a QRS over 100 ms, ventricular arrhythmia, or hypotension. Repeat every few minutes until the QRS narrows. Watch the complex shrink on the monitor.',
+          'Airway early: these patients lose consciousness and seize quickly. If intubated, ventilate to avoid acidosis, which worsens the toxicity.',
+          'Seizures: a benzodiazepine (midazolam 5-10 mg IM or 2.5-5 mg IV). Do not use phenytoin.',
+          'Hypotension: normal saline 10-20 mL/kg, then bicarbonate, then norepinephrine.',
+          '**Avoid** class IA and IC antiarrhythmics (procainamide, flecainide), amiodarone, beta blockers, physostigmine and flumazenil. For ventricular arrhythmia that persists after bicarbonate, lidocaine 1-1.5 mg/kg is the drug.',
+          'The same picture and the same treatment apply to diphenhydramine, cocaine, flecainide and some antimalarial overdoses.'
+        ], 'Bicarbonate infusion to a serum pH of 7.50-7.55, intensive care monitoring, and IV lipid emulsion or ECMO for refractory cardiovascular collapse.', 3);
+
+      case 'hypothermia':
+        return entry('Hypothermia', [
+          '**Handle gently and keep the patient horizontal.** A cold heart is irritable, and rough movement can precipitate VF.',
+          'Stop further heat loss: remove wet clothing, insulate, warm the vehicle, and apply heat packs to the trunk. Warmed IV fluid (38-42 C) in 250-500 mL boluses.',
+          'The bradycardia is physiological at this temperature. Do not treat it with atropine or pacing - it resolves as the patient warms.',
+          'Check breathing and pulse for longer than usual (up to 30-60 seconds) before starting CPR; an organized rhythm with any sign of life should not be compressed.',
+          'In cardiac arrest: CPR and defibrillation as normal. Many protocols limit shocks and withhold drugs until the core temperature is above 30 C (86 F), then give drugs at longer intervals until 35 C.',
+          'Do not stop resuscitation because of cold: "not dead until warm and dead". Transport an arrested hypothermic patient to an ECMO-capable centre where one is in reach.'
+        ], 'Active core rewarming; extracorporeal rewarming (ECMO or bypass) for arrest or instability.', 10);
+
+      case 'pericarditis':
+        return entry('Acute pericarditis', [
+          'This is not a cath-lab activation - but be sure. Reciprocal ST depression (other than in aVR and V1), ST elevation in III greater than in II, or convex ST segments mean STEMI until proven otherwise. When in doubt, treat as an acute coronary syndrome and transmit the ECG.',
+          'Comfort: let the patient sit forward. Analgesia per protocol - ketorolac 15 mg IV or ibuprofen where available; fentanyl 25-50 mcg IV for severe pain.',
+          'Avoid fibrinolytics and anticoagulants if pericarditis is the working diagnosis - they risk bleeding into the pericardium.',
+          'Watch for tamponade: falling blood pressure, distended neck veins, muffled heart sounds, pulsus paradoxus, and a tracing that loses voltage.'
+        ], 'An NSAID (ibuprofen 600-800 mg three times daily or aspirin 650-1000 mg three times daily) with colchicine 0.5-0.6 mg once or twice daily for 3 months; echocardiography to look for an effusion.', 40);
+
+      case 'early_repol':
+        return entry('Benign early repolarization', [
+          'A normal variant. No treatment.',
+          'It is a diagnosis you make only when the story is not ischaemic. With chest pain, repeat the 12-lead every 5-10 minutes: early repolarization does not change, and an evolving STEMI does.',
+          'Features against benign: ST elevation over 5 mm, reciprocal depression, a T wave tall relative to the R wave, new Q waves, or loss of R-wave height in V2-V4.'
+        ], 'None; comparison with old ECGs.', 80);
+
+      case 'alternans':
+        return entry('Electrical alternans - suspect cardiac tamponade', [
+          'Alternans with tachycardia and hypotension is tamponade until proven otherwise. Look for Beck\'s triad: hypotension, distended neck veins, muffled heart sounds.',
+          '**Support preload:** normal saline 250-500 mL boluses, repeated, to keep the right heart filling against the pressure around it.',
+          'Avoid everything that lowers preload: nitroglycerin, morphine, diuretics. Avoid positive-pressure ventilation and intubation if at all possible - they can cause arrest.',
+          'If the patient arrests (usually PEA), CPR is relatively ineffective; the fix is drainage. Rapid transport with pre-alert. Traumatic tamponade goes to a trauma centre for thoracotomy.'
+        ], 'Urgent echocardiography and pericardiocentesis or a surgical pericardial window.', 4);
+
+      case 'low_voltage':
+        return entry('Low voltage', [
+          'A finding to explain, not to treat. Check the gain setting and electrode contact first.',
+          'Then think of what lies between the heart and the electrodes or what has replaced the muscle: pericardial effusion (look for tachycardia and alternans), obesity, COPD with hyperinflation, pleural effusion, severe hypothyroidism, infiltrative cardiomyopathy such as amyloid, and extensive old infarction.',
+          'Low voltage with hypotension and distended neck veins is tamponade - fluid bolus and rapid transport.'
+        ], 'Echocardiography.', 60);
+
+      case 'brugada':
+        return entry('Brugada pattern', [
+          'A sodium channel disorder that causes VF and sudden death, typically at rest or in sleep. Keep the patient monitored with the pads within reach.',
+          '**Treat a fever aggressively** - acetaminophen 1 g and cooling. Fever unmasks the pattern and triggers the arrhythmia.',
+          '**Avoid sodium-channel blockers:** procainamide, flecainide, propafenone, tricyclic antidepressants, lithium, and cocaine. Use propofol and bupivacaine with caution.',
+          'VF or polymorphic VT: defibrillate by the standard algorithm.',
+          'A patient with this pattern and syncope, a seizure-like episode, or nocturnal gasping needs admission, however well they look.'
+        ], 'For electrical storm, isoproterenol infusion and quinidine. An ICD for survivors of arrest or arrhythmic syncope; family screening.', 15);
+
+      case 'pe':
+        return entry('Acute pulmonary embolism (right heart strain)', [
+          'Oxygen to keep SpO2 at 90% or above. Sit the patient up if the blood pressure allows.',
+          'Hypotension: a cautious fluid bolus of 250-500 mL only - a strained right ventricle fails further if overfilled. If still hypotensive, norepinephrine 0.1-0.5 mcg/kg/min.',
+          'Avoid intubation and positive-pressure ventilation unless unavoidable; they can precipitate arrest in a failing right ventricle.',
+          'Sudden PEA arrest in a patient with risk factors (recent surgery, immobility, cancer, pregnancy, a swollen leg) is PE until proven otherwise - high-quality CPR and early notification, since thrombolysis during CPR is an option.',
+          'A normal ECG does not rule PE out; the commonest finding is sinus tachycardia alone.'
+        ], 'Anticoagulation (heparin 80 units/kg IV bolus, or a low-molecular-weight heparin or direct oral anticoagulant). For shock or arrest: systemic thrombolysis - alteplase 100 mg over 2 hours, or a 50 mg bolus in cardiac arrest - or catheter or surgical embolectomy.', 5);
+
+      case 'lqts':
+        return entry('Long QT', [
+          'Monitor continuously with the pads within reach - the risk is torsades de pointes.',
+          '**Do not give QT-prolonging drugs:** ondansetron, haloperidol, droperidol, amiodarone, procainamide, sotalol, macrolide and fluoroquinolone antibiotics, methadone.',
+          'If torsades occurs: magnesium sulfate 2 g IV, and defibrillate (unsynchronized) if sustained or pulseless.',
+          'Ask about syncope, a family history of sudden death, current medications, and vomiting or diarrhoea (low potassium and magnesium).'
+        ], 'Potassium and magnesium correction, withdrawal of the culprit drug; for congenital long QT, a beta blocker (nadolol or propranolol) and an ICD in high-risk patients.', 25);
+    }
+    return null;
+  }
+
+  function artifactEntry(cfg) {
+    switch (cfg.artifact) {
+      case 'la_ra_reversal':
+        return entry('Limb lead reversal', [
+          'Treat nothing. Check the electrodes against their labels, correct them, and record the 12-lead again.',
+          'Keep both tracings and label the first one as a lead reversal.'
+        ], '', 9);
+      case 'dextrocardia':
+        return entry('Dextrocardia', [
+          'No treatment - it is an anatomical variant. Confirm by examination: the apex beat and heart sounds are on the right.',
+          'To get an interpretable 12-lead, reverse the arm electrodes and place the chest leads in mirror image across the right chest (V1 at the left sternal edge, V2 at the right, V3R-V6R). Label the tracing clearly.',
+          'Defibrillation pads and manual compressions should also be sited for a right-sided heart.'
+        ], '', 60);
+      case 'tremor':
+      case 'ac60':
+      case 'wander':
+      case 'loose_lead':
+        return entry('Artifact - fix the tracing before treating it', [
+          'Never make a treatment decision from a tracing you cannot read. Look at the patient: a person who is talking to you is not in VF, whatever the monitor shows.',
+          'Skin preparation is most of the fix: dry the skin, shave if needed, abrade lightly, and use fresh electrodes. Put limb electrodes on the limbs, not the torso.',
+          cfg.artifact === 'tremor' ? 'Muscle tremor: warm and reassure the patient, support the arms, ask them to rest their hands under their buttocks, and treat shivering or pain.'
+            : cfg.artifact === 'ac60' ? '60-cycle interference: move the cables away from power cords and electrical equipment, unplug what you can, and check for a dry or loose electrode.'
+            : cfg.artifact === 'wander' ? 'Baseline wander: have the patient lie still and breathe quietly, keep the cables from being tugged, and replace poorly adherent electrodes.'
+            : 'Loose electrode: find the lead that is misbehaving, replace that electrode, and check the cable connection.',
+          'Then repeat the 12-lead.'
+        ], '', 9);
+    }
+    return null;
+  }
+
+  /* ------------------------------------------------------------- build */
+
+  function build(result) {
+    var cfg = result.config, m = result.measurements;
+    var out = [];
+    var paced = cfg.pacing && cfg.pacing !== 'none';
+    var pureRhythm = cfg.rhythm === 'vfib' || cfg.rhythm === 'asystole';
+
+    function push(e) { if (e) out.push(e); }
+
+    // The rhythm entry is skipped when a pacemaker is setting the rhythm.
+    if (!paced || pureRhythm) {
+      var blocked = cfg.avblock && cfg.avblock !== 'none' && cfg.avblock !== 'first';
+      var plainSinus = ['sinus', 'sinus_brady', 'sinus_tach', 'sinus_arrhythmia'].indexOf(cfg.rhythm) !== -1;
+      // A sinus rhythm with a significant AV block is managed as the block.
+      // ...and the slow sinus rhythm of hypothermia is managed by rewarming,
+      // not by the bradycardia algorithm.
+      var coldBrady = cfg.pattern === 'hypothermia' && cfg.rhythm === 'sinus_brady';
+      if (!(blocked && plainSinus) && !coldBrady) push(rhythmEntry(cfg, m));
+    }
+    if (!pureRhythm) {
+      push(blockEntry(cfg));
+      push(ectopyEntry(cfg));
+      push(pacingEntry(cfg));
+      push(ischemiaEntry(cfg));
+      push(patternEntry(cfg));
+      push(conductionEntry(cfg));
+      push(chamberEntry(cfg));
+    }
+    // Shivering on a hypothermic patient is a finding, not a faulty tracing.
+    if (!(cfg.pattern === 'hypothermia' && cfg.artifact === 'tremor')) push(artifactEntry(cfg));
+
+    // A dull "normal sinus rhythm" entry adds nothing next to a real finding.
+    if (out.length > 1) {
+      out = out.filter(function (e) { return e.priority < 95; });
+    }
+    out.sort(function (a, b) { return a.priority - b.priority; });
+    return out;
+  }
+
+  EKG.treatment = {
+    build: build,
+    BASIS: 'Adult doses, based on American Heart Association ACLS (2020 guidelines with the 2025 update) and the 2025 ACC/AHA acute coronary syndromes guideline.'
   };
 })(window.EKG);
 
@@ -3110,6 +4132,8 @@ window.EKG = window.EKG || {};
         ? 'no visible P waves at all — they are buried inside the QRS because the atria and ventricles are being depolarised at the same moment.'
         : 'inverted P waves ' + (cfg.retrogradeP === 'after' ? 'immediately after' : 'immediately before') +
           ' each QRS. The impulse is starting at the AV junction and travelling *backwards* into the atria, so the atrial depolarisation vector points up and to the right instead of down and to the left — which is exactly why the P wave is upside down in II, III and aVF.'));
+    } else if (cfg.rhythm === 'svt') {
+      body.push('**Atrial activity:** no P wave in front of the QRS. In the commonest SVT (AV nodal re-entry) the atria and ventricles are activated almost simultaneously, so the P wave is retrograde and lands in the tail of the QRS. Look closely at the end of the QRS in II, III and aVF for a small extra negative nick (a "pseudo-S" wave) and in V1 for a small extra positive one (a "pseudo-r prime") - neither is there in the same patient\'s sinus rhythm.');
     } else if (EKG.rhythm.isVentricular(cfg.rhythm)) {
       if (cfg.avDissociation) {
         body.push('**Atrial activity:** look carefully and there are sinus P waves marching through the tachycardia at their own independent rate, completely unrelated to the QRS complexes. That is AV dissociation, and it is the single most reliable sign that a wide complex tachycardia is ventricular in origin. The sinus node has not noticed the VT and is still doing its job.');
@@ -3337,6 +4361,13 @@ window.EKG = window.EKG || {};
     };
     if (artifactText[cfg.artifact]) body.push(artifactText[cfg.artifact]);
 
+    var terrQ = EKG.morphology.TERRITORIES[cfg.ischemia];
+    if (terrQ && cfg.ischemia !== 'subendocardial' && cfg.ischemia !== 'posterior' &&
+        (cfg.stage === 'old' || cfg.stage === 'evolving' || (cfg.stage === 'acute' && cfg.qWaves))) {
+      headline.push('pathologic Q waves');
+      body.push('**Pathologic Q waves and lost R waves.** Look at the leads over the ' + terrQ.wall + ' (' + terrQ.leads + '): the QRS there starts with a wide, deep negative deflection, and the R wave that should follow is small or absent. Compare them with the same leads on a normal tracing - the R wave has not just gained a Q in front of it, it has lost height. Both changes say the same thing: the muscle under those electrodes is no longer generating a signal.');
+    }
+
     if (!body.length) {
       body.push('QRS morphology is unremarkable: a narrow QRS with normal septal q waves in the lateral leads, and R waves that grow progressively across the precordium as the electrodes move over the left ventricle. The transition — the lead where the R and S are about equal — normally sits at V3 or V4.');
       headline.push('normal QRS morphology');
@@ -3431,7 +4462,7 @@ window.EKG = window.EKG || {};
       body.push('**Hyperacute T waves.** In the first minutes of occlusion, before the ST segment lifts, the T waves over the affected wall become tall, broad-based and fat — bigger than the QRS in some leads. They are easy to dismiss as normal or as hyperkalaemia. The distinction is that hyperkalaemic T waves are narrow and pointed with a tight base, while hyperacute T waves are broad and bulky, and they are confined to a coronary territory rather than being global.');
     }
     if (cfg.stage === 'evolving' || cfg.stage === 'old') {
-      body.push('**Q waves.** A pathologic Q wave is over 40 ms wide or deeper than a quarter of the following R wave. It means dead, electrically silent muscle: an electrode over infarcted tissue is effectively looking through a hole in the wall and recording the depolarisation of the opposite wall moving away from it. Q waves take hours to develop and usually persist for life, so they mark territory already lost.');
+      body.push('**Q waves.** A pathologic Q wave is 40 ms (one small square) or more wide, or deeper than a quarter of the R wave that follows it - and any Q wave at all in V1-V3 is abnormal. It means dead, electrically silent muscle: an electrode over infarcted tissue is effectively looking through a hole in the wall and recording the depolarisation of the opposite wall moving away from it. That is also why the R wave over the scar is small or missing altogether - the muscle that used to write it is gone. A QS complex (all negative, no R wave) is the extreme case. Q waves take hours to develop and usually persist for life, so they mark territory already lost.');
     }
 
     if (cfg.ivcd === 'lbbb' && terr) {
@@ -3508,53 +4539,32 @@ window.EKG = window.EKG || {};
     return section('anatomy', 'Anatomy & vessel', terr.label + ' — ' + terr.artery, body);
   }
 
-  /* ------------------------------------------------------ field notes */
+  /* ------------------------------------------------- treatment notes */
 
+  /* Management, specific to what is on the page. The content lives in
+   * treatment.js -- one entry per rhythm, block, infarct pattern and
+   * metabolic pattern -- and this just lays the applicable entries out,
+   * most time-critical first. Lines starting "- " render as a list. */
   function fieldSection(r, interp) {
-    var cfg = r.config, m = r.measurements, body = [];
-    var terr = EKG.morphology.TERRITORIES[cfg.ischemia];
+    var cfg = r.config, body = [];
+    var entries = EKG.treatment.build(r);
+
+    body.push('**' + EKG.treatment.BASIS + '** Your own protocols and medical direction take precedence wherever they differ; doses are for adults.');
 
     if (interp.alert) {
-      body.push('This tracing meets STEMI criteria. Transmit it, activate early, and keep scene time short — the clock that matters is first medical contact to balloon.');
-      body.push('Repeat the 12-lead: serial tracings catch evolution, catch reperfusion, and catch the infarct that was not there on the first one.');
+      body.push('This tracing meets criteria for an acute coronary occlusion. Transmit it, activate early, and keep scene time short.');
     }
 
-    if (cfg.ischemia === 'inferior' || cfg.ischemia === 'inferior_rv' || cfg.ischemia === 'inferoposterior') {
-      body.push('Acquire V4R before giving nitroglycerin. If the right ventricle is involved and the patient is preload dependent, nitro can drop them.');
-      body.push('Expect bradycardia and AV block. Have pacing pads on the patient, not in the bag.');
-    }
-    if (cfg.ischemia === 'extensive_anterior' || cfg.ischemia === 'anteroseptal' || cfg.ischemia === 'anterior') {
-      body.push('Watch for pump failure rather than bradycardia. Listen to the lungs, watch the pressure, and be cautious with fluid.');
-    }
-    if (cfg.ischemia === 'posterior' || cfg.ischemia === 'inferolateral') {
-      body.push('Get posterior leads (V7-V9). A posterior infarct is a STEMI that qualifies for reperfusion — but only if somebody looks for it.');
-    }
-
-    if (m.hr < 50 && !cfg.pacing) {
-      body.push('Symptomatic bradycardia: assess perfusion first. Atropine works at the AV node, so it is most likely to help a narrow-complex block in an inferior MI and least likely to help an infra-nodal block with a wide escape rhythm. If it is not working, move to pacing or chronotropic infusions rather than repeating atropine.');
-    }
-    if (cfg.avblock === 'mobitz2' || cfg.avblock === 'third') {
-      body.push('This block is below the AV node or complete. Atropine is unlikely to help and can occasionally worsen it by speeding the atria without improving conduction. Prepare for transcutaneous pacing.');
-    }
-    if (cfg.rhythm === 'vtach' || cfg.rhythm === 'polymorphic_vt') {
-      body.push('Assess perfusion immediately. Unstable wide complex tachycardia gets synchronised cardioversion (or unsynchronised defibrillation if polymorphic, because the monitor cannot reliably sync to it). Stable VT buys you time for antiarrhythmics.');
-    }
-    if (cfg.pattern === 'hyperk_severe' || cfg.pattern === 'hyperk_moderate') {
-      body.push('Calcium first — it stabilises the myocardial membrane within minutes and does not lower the potassium. Then shift it (beta agonists, bicarbonate, insulin and glucose per your protocol). Ask about dialysis, crush injury, and renal failure.');
-    }
-    if (cfg.pattern === 'tca') {
-      body.push('Sodium bicarbonate for a QRS over 100 ms. Avoid class I antiarrhythmics — they block the same channel the poison does.');
-    }
-    if (cfg.artifact && cfg.artifact !== 'none') {
-      body.push('Before treating anything on this tracing, fix the acquisition. A 12-lead you cannot trust is worse than no 12-lead, because it invites a decision built on an artifact.');
-    }
-    if (cfg.ischemia === 'wellens_a' || cfg.ischemia === 'wellens_b') {
-      body.push('The patient is pain-free and looks well. Resist the urge to downgrade them — this pattern predicts anterior infarction within days. Transport to a PCI-capable facility and hand over the pattern by name.');
-    }
+    entries.forEach(function (e) {
+      body.push('**' + e.title + '**');
+      e.field.forEach(function (step) { body.push('- ' + step); });
+      if (e.hospital) body.push('*Definitive care:* ' + e.hospital);
+    });
 
     body.push('Whatever the tracing shows, treat the patient in front of you. The 12-lead is one piece of information alongside the story, the vital signs and the way they look.');
 
-    return section('field', 'What it means in the field', 'Prehospital implications', body);
+    var headline = entries.length ? entries.map(function (e) { return e.title; }).slice(0, 2).join(' + ') : 'Prehospital management';
+    return section('field', 'Treatment & field management', headline, body);
   }
 
   /* --------------------------------------------------------- mimics */
@@ -3573,7 +4583,7 @@ window.EKG = window.EKG || {};
       body.push('Before you commit to acute coronary occlusion, run the mimics:');
       mimics.forEach(function (mm2) { body.push(mm2); });
       body.push('The two questions that resolve most of these: does the ST deviation respect a coronary territory, and is there reciprocal change somewhere? A blocked artery affects one wall and produces a mirror somewhere else. Most mimics do neither.');
-    } else if (cfg.pattern === 'lvh_strain' || cfg.pattern === 'pericarditis' || cfg.pattern === 'early_repol') {
+    } else if (cfg.chambers === 'lvh_strain' || cfg.pattern === 'pericarditis' || cfg.pattern === 'early_repol' || cfg.pattern === 'brugada') {
       body.push('This is a STEMI mimic. Be able to say out loud why it is not an infarct — that reasoning is what stops an unnecessary cath lab activation, and more importantly, what stops you from dismissing the real thing later.');
     } else {
       return null;
@@ -3626,6 +4636,8 @@ window.EKG = window.EKG || {};
     colWidth: 62.5,     // 2.5 seconds at 25 mm/s
     cols: 4,
     rowHeight: 30,
+    headroom: 6,
+    overlap: 9,         // how far a tall complex may run into the next row
     rhythmHeight: 32,
     headerHeight: 31
   };
@@ -3653,7 +4665,8 @@ window.EKG = window.EKG || {};
   }
 
   /* Build the polyline for one lead over one time window. */
-  function tracePath(data, fs, t0, t1, x0, baselineY, clip) {
+  function tracePath(data, fs, t0, t1, x0, baselineY, clip, clipDown) {
+    if (clipDown === undefined) clipDown = clip;
     var i0 = Math.max(0, Math.round(t0 * fs));
     var i1 = Math.min(data.length - 1, Math.round(t1 * fs));
     var pts = [];
@@ -3661,7 +4674,7 @@ window.EKG = window.EKG || {};
       var x = x0 + ((i - i0) / fs) * MM_PER_SEC;
       var y = baselineY - data[i] * MM_PER_MV;
       if (y < baselineY - clip) y = baselineY - clip;
-      if (y > baselineY + clip) y = baselineY + clip;
+      if (y > baselineY + clipDown) y = baselineY + clipDown;
       pts.push(x.toFixed(2) + ',' + y.toFixed(2));
     }
     return pts.join(' ');
@@ -3687,7 +4700,9 @@ window.EKG = window.EKG || {};
     var nLines = blind ? 2 : Math.min(interp.lines.length, maxLines);
     var headerH = blind ? 20
       : 15 + (interp.alert ? 7 : 0) + nLines * 4.1 + 4;
-    var tracingTop = PAGE.pad + headerH;
+    /* A few millimetres of clear paper above the first row, so a tall R wave
+     * there has somewhere to go before it reaches the printed header. */
+    var tracingTop = PAGE.pad + headerH + PAGE.headroom;
     var H = tracingTop + PAGE.rowHeight * 3 + PAGE.rhythmHeight + PAGE.pad + 5;
 
     var s = [];
@@ -3704,7 +4719,7 @@ window.EKG = window.EKG || {};
       '<path d="M5,0 L0,0 0,5" fill="none" class="grid-major" stroke-width="0.22"/></pattern>' +
       '</defs>');
     s.push('<rect width="' + W + '" height="' + H + '" class="paper"/>');
-    s.push('<rect x="0" y="' + (tracingTop - 3) + '" width="' + W + '" height="' + (H - tracingTop + 3) +
+    s.push('<rect x="0" y="' + (tracingTop - 3 - PAGE.headroom) + '" width="' + W + '" height="' + (H - tracingTop + 3 + PAGE.headroom) +
       '" fill="url(#majorGrid)"/>');
 
     // ---- header
@@ -3725,7 +4740,11 @@ window.EKG = window.EKG || {};
     }
 
     // ---- twelve lead panels
-    var clip = PAGE.rowHeight / 2 - 1.2;
+    /* Real machines do not chop a tall complex off at the edge of its row --
+     * it simply runs up into the row above, and a big LVH or LBBB tracing has
+     * overlapping leads. Clipping at the row boundary squared the tops off
+     * every large R wave and made the true voltage unmeasurable. */
+    var clip = PAGE.rowHeight / 2 + PAGE.overlap;
     for (var row = 0; row < 3; row++) {
       var baseY = rows[row] + PAGE.rowHeight / 2;
 
@@ -3760,6 +4779,7 @@ window.EKG = window.EKG || {};
     var ry = tracingTop + PAGE.rowHeight * 3;
     var rBase = ry + PAGE.rhythmHeight / 2;
     var rClip = PAGE.rhythmHeight / 2 - 1.2;
+    var rClipUp = PAGE.rhythmHeight / 2 + PAGE.overlap;
     s.push('<line x1="' + PAGE.pad + '" y1="' + ry + '" x2="' + (W - PAGE.pad) + '" y2="' + ry + '" class="row-sep"/>');
     var rcx = PAGE.pad + 2;
     s.push('<polyline class="trace" points="' +
@@ -3770,7 +4790,7 @@ window.EKG = window.EKG || {};
     s.push('<text x="' + (PAGE.pad + PAGE.calWidth + 1.5) + '" y="' + (ry + 5.5) + '" class="lead-label">' +
       rhythmLead + '  (rhythm strip)</text>');
     s.push('<polyline class="trace" points="' +
-      tracePath(result.leads[rhythmLead], result.fs, 0, result.duration, PAGE.pad + PAGE.calWidth, rBase, rClip) + '"/>');
+      tracePath(result.leads[rhythmLead], result.fs, 0, result.duration, PAGE.pad + PAGE.calWidth, rBase, rClipUp, rClip) + '"/>');
     s.push(pacerSpikes(result, 0, result.duration, PAGE.pad + PAGE.calWidth, rBase, rClip));
 
     // ---- technical footer, exactly the sort of line a monitor prints
@@ -3987,9 +5007,11 @@ window.EKG = window.EKG || {};
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  // Minimal inline formatting for the explanation text: **bold** only.
+  // Minimal inline formatting for the explanation text: **bold** and *italic*.
   function fmt(s) {
-    return escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    return escapeHtml(s)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+?)\*/g, '$1<em>$2</em>');
   }
 
   /* ------------------------------------------------------- build panel */
@@ -4280,7 +5302,7 @@ window.EKG = window.EKG || {};
     state.explanation.sections.forEach(function (sec, i) {
       var d = document.createElement('details');
       d.className = 'exp-section';
-      if (i < 2) d.open = true;
+      if (i < 2 || sec.id === 'field') d.open = true;
 
       var sum = document.createElement('summary');
       sum.innerHTML = '<span class="exp-step">' + (i + 1) + '</span>' +
@@ -4290,7 +5312,17 @@ window.EKG = window.EKG || {};
 
       var body = document.createElement('div');
       body.className = 'exp-body';
+      // Consecutive lines starting "- " are gathered into one bulleted list.
+      var listEl = null;
       sec.body.forEach(function (p) {
+        if (p.indexOf('- ') === 0) {
+          if (!listEl) { listEl = document.createElement('ul'); listEl.className = 'exp-list'; body.appendChild(listEl); }
+          var li = document.createElement('li');
+          li.innerHTML = fmt(p.slice(2));
+          listEl.appendChild(li);
+          return;
+        }
+        listEl = null;
         var el = document.createElement('p');
         el.innerHTML = fmt(p);
         body.appendChild(el);

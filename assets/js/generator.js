@@ -17,7 +17,17 @@ window.EKG = window.EKG || {};
 
   var OVERLAY_SHAPES = {
     bump: M.SHAPES.bump,
-    covedST: function (u) { return 1 - 1.9 * Math.pow(u, 0.7); }
+    /* Brugada type 1. Leaves the J point at full height, rolls over a convex
+     * shoulder, crosses the baseline about half way and bottoms out in a
+     * shallow inverted T before coming back -- one smooth curve, with no
+     * step at either end. */
+    covedST: function (u) {
+      var rise = 0.12;                       // climbing out of the S wave
+      if (u < rise) return 0.5 * (1 - Math.cos(Math.PI * u / rise));
+      var v = (u - rise) / (1 - rise);
+      if (v < 0.60) return 1 - 1.42 * 0.5 * (1 - Math.cos(Math.PI * v / 0.60));
+      return -0.42 * 0.5 * (1 + Math.cos(Math.PI * (v - 0.60) / 0.40));
+    }
   };
 
   function makeRng(seed) {
@@ -65,6 +75,16 @@ window.EKG = window.EKG || {};
       var spin = [0, -35, 40][morph || 0];
       dir = L.axisDir(60 + spin, -0.15 + (morph || 0) * 0.15);
     }
+    /* Atrial enlargement draws the two atria separately: right first, left
+     * second and pointing backward. Only a normal sinus P is split this way;
+     * ectopic, retrograde and paced P waves keep a single component. */
+    if (tpl.pParts && (!kind || kind === 'sinus')) {
+      tpl.pParts.forEach(function (part) {
+        paint(buf.vx, buf.vy, buf.vz, fs, tP + part.u0 * dur, tP + part.u1 * dur,
+          part.amp, part.dir, M.SHAPES.bump);
+      });
+      return;
+    }
     paint(buf.vx, buf.vy, buf.vz, fs, tP, tP + dur, amp, dir, shape);
   }
 
@@ -79,7 +99,7 @@ window.EKG = window.EKG || {};
     if (tpl.prSegmentShift && tpl.pr > 0) {
       var prSegStart = tQRS - (tpl.pr - tpl.pDur) / 1000;
       paint(buf.vx, buf.vy, buf.vz, fs, prSegStart, tQRS,
-        tpl.prSegmentShift * gain, L.unit([0.3, 0.72, -0.62]),
+        tpl.prSegmentShift * gain, tpl.prSegmentDir || L.unit([0.3, 0.72, -0.62]),
         function () { return 1; });
     }
 
@@ -138,6 +158,7 @@ window.EKG = window.EKG || {};
     if (overlayOut && tpl.overlays) {
       tpl.overlays.forEach(function (ov) {
         var start = ov.t0 === 'j' ? qrsEnd : (ov.t0 === 'tStart' ? tStart : tQRS + (ov.t0 || 0) / 1000);
+        start += (ov.lead || 0) / 1000;
         overlayOut.push({
           leads: ov.leads, t0: start, t1: start + ov.dur / 1000,
           amp: ov.amp * gain, shape: ov.shape
@@ -189,14 +210,29 @@ window.EKG = window.EKG || {};
         for (var i = 0; i < n; i++) d[i] += Math.sin(2 * Math.PI * 60 * i / fs + ph) * 0.055;
       });
     } else if (kind === 'loose_lead') {
+      /* An electrode losing contact: bursts of wild, slow, high-amplitude
+       * swings with fast hash on top, coming and going as the patient
+       * moves. The bursts are spread over the whole ten seconds so that at
+       * least one lands inside the 2.5-second window in which this lead is
+       * actually printed -- confined to the middle of the strip, the fault
+       * was invisible on any lead in the first or last column. */
       var target = cfg.looseLead || 'III';
       var d2 = leadData[target];
       if (d2) {
-        var start = Math.round(n * 0.25), stop = Math.round(n * 0.62), v = 0;
-        for (var i2 = start; i2 < stop; i2++) {
-          v = v * 0.9 + (rng() - 0.5) * 0.9;
-          d2[i2] += v + Math.sin(i2 / 7) * 0.4;
-        }
+        var bursts = [[0.3, 1.5], [3.0, 4.3], [5.6, 6.9], [8.1, 9.4]];
+        var v = 0, slow = 0;
+        bursts.forEach(function (bw) {
+          var i0 = Math.round(bw[0] * fs), i1 = Math.min(n, Math.round(bw[1] * fs));
+          var phs = rng() * 6.28, f1 = 1.1 + rng() * 1.3;
+          for (var i2 = i0; i2 < i1; i2++) {
+            var u = (i2 - i0) / (i1 - i0);
+            var edge = Math.min(1, u / 0.12, (1 - u) / 0.12);
+            v = v * 0.86 + (rng() - 0.5) * 0.55;
+            slow = Math.sin(2 * Math.PI * f1 * (i2 - i0) / fs + phs) * 0.75 +
+                   Math.sin(2 * Math.PI * f1 * 2.7 * (i2 - i0) / fs) * 0.30;
+            d2[i2] += (v + slow) * edge;
+          }
+        });
       }
     }
   }
@@ -276,14 +312,27 @@ window.EKG = window.EKG || {};
     var overlays = [];
 
     if (sched.chaos && sched.chaos.kind === 'vfib') {
-      var amp = sched.chaos.coarse ? 0.85 : 0.18;
-      var ph1 = 0, ph2 = 0, ph3 = 0;
+      /* Fibrillation has no fixed axis. Three oscillators that drift in
+       * frequency and never stay in step, one per spatial direction, make
+       * the vector wander through space -- so every lead shows the same
+       * chaos at a different size and phase. Driving all three axes from one
+       * waveform (the earlier version) gave twelve scaled copies of a single
+       * squiggle, with whichever leads lay across that fixed direction
+       * almost flat. The amplitude also waxes and wanes, as real coarse VF
+       * does. */
+      var amp = sched.chaos.coarse ? 0.62 : 0.14;
+      var ph = [rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28];
+      var fBase = [4.6, 5.3, 4.1, 7.4, 6.6, 8.1];
+      var drift = [700, 930, 1180, 610, 840, 1010];
+      var envPh = rng() * 6.28;
       for (var i = 0; i < n; i++) {
-        ph1 += (4.5 + Math.sin(i / 900) * 1.6) * 2 * Math.PI / fs;
-        ph2 += (7.3 + Math.cos(i / 640) * 2.1) * 2 * Math.PI / fs;
-        ph3 += (2.7 + Math.sin(i / 1400) * 0.9) * 2 * Math.PI / fs;
-        var v = (Math.sin(ph1) * 0.6 + Math.sin(ph2) * 0.3 + Math.sin(ph3) * 0.5) * amp;
-        buf.vx[i] += v * 0.5; buf.vy[i] += v * 0.75; buf.vz[i] += v * 0.35;
+        for (var k = 0; k < 6; k++) {
+          ph[k] += (fBase[k] + Math.sin(i / drift[k] + k) * 1.3) * 2 * Math.PI / fs;
+        }
+        var env = amp * (0.72 + 0.28 * Math.sin(i / 1150 + envPh) + 0.16 * Math.sin(i / 430 + 1.7));
+        buf.vx[i] += env * (Math.sin(ph[0]) * 0.75 + Math.sin(ph[3]) * 0.30);
+        buf.vy[i] += env * (Math.sin(ph[1]) * 0.80 + Math.sin(ph[4]) * 0.30);
+        buf.vz[i] += env * (Math.sin(ph[2]) * 0.50 + Math.sin(ph[5]) * 0.22);
       }
     } else if (sched.chaos && sched.chaos.kind === 'asystole') {
       // nothing but the noise added later
@@ -302,14 +351,24 @@ window.EKG = window.EKG || {};
         }
       }
       if (sched.fib) {
-        var fibDir = L.unit([0.2, 0.8, -0.2]);
-        var acc = 0;
+        /* Fibrillatory waves: continuous, irregular, 350-600 a minute, never
+         * the same twice -- and biggest in V1, which sits right over the
+         * atria. A handful of drifting oscillators in the 5-9 Hz band gives
+         * that; filtered white noise (the earlier version) just looked like a
+         * noisy baseline with no f waves in it. */
+        var fibDir = L.unit([-0.30, 0.55, -0.75]);
+        var fp = [rng() * 6.28, rng() * 6.28, rng() * 6.28];
+        var ff = [5.6, 7.1, 8.7];
+        var famp = (cfg.rhythm === 'afib_slow' ? 0.035 : 0.05);
         for (var g = 0; g < n; g++) {
-          acc = acc * 0.72 + (rng() - 0.5) * 0.5;
-          var famp = (cfg.rhythm === 'afib_slow' ? 0.05 : 0.085);
-          buf.vx[g] += acc * famp * fibDir[0];
-          buf.vy[g] += acc * famp * fibDir[1];
-          buf.vz[g] += acc * famp * fibDir[2];
+          fp[0] += (ff[0] + Math.sin(g / 520) * 1.1) * 2 * Math.PI / fs;
+          fp[1] += (ff[1] + Math.sin(g / 370 + 1) * 1.4) * 2 * Math.PI / fs;
+          fp[2] += (ff[2] + Math.sin(g / 290 + 2) * 1.2) * 2 * Math.PI / fs;
+          var fv = (Math.sin(fp[0]) + 0.7 * Math.sin(fp[1]) + 0.45 * Math.sin(fp[2])) *
+            famp * (0.75 + 0.35 * Math.sin(g / 640 + 0.5));
+          buf.vx[g] += fv * fibDir[0];
+          buf.vy[g] += fv * fibDir[1];
+          buf.vz[g] += fv * fibDir[2];
         }
       }
 

@@ -105,7 +105,9 @@ window.EKG = window.EKG || {};
       var fRate = cfg.flutterRate || 300;
       out.flutter = { rate: fRate };
       out.atrialRate = fRate;
-      var ratio = cfg.flutterConduction || 2;
+      // 0 means variable block, so it must not fall through to the default.
+      var ratio = (cfg.flutterConduction === 0 || cfg.flutterConduction === '0')
+        ? 0 : (Number(cfg.flutterConduction) || 2);
       var fInt = 60 / fRate;
       var vt2 = 0.4, k = 0;
       while (vt2 < duration) {
@@ -129,6 +131,11 @@ window.EKG = window.EKG || {};
           out.pWaves.push({ t: t3 + offset, kind: 'retro' });
         }
         if (rhythm === 'atach') out.pWaves.push({ t: t3 - 0.11, kind: 'ectopic' });
+        /* Typical AVNRT: atria and ventricles fire almost together, so the
+         * retrograde P lands in the tail of the QRS -- a pseudo-S in the
+         * inferior leads and a pseudo-r' in V1. It is the only atrial
+         * activity an SVT shows, and worth being able to find. */
+        if (rhythm === 'svt') out.pWaves.push({ t: t3 + 0.075, kind: 'retro' });
         t3 += rr * (1 + (rnd(seed) - 0.5) * 0.01);
       }
       out.atrialRate = rhythm === 'atach' ? rate : null;
@@ -331,6 +338,14 @@ window.EKG = window.EKG || {};
       return out;
     }
 
+    /* A device with an atrial lead owns the atria: it either paces them or
+     * tracks them, so the slower native sinus P waves do not wander through
+     * the paced rhythm. (A single-chamber VVI pacer cannot see the atria at
+     * all, and there the dissociated native P waves are left in on purpose.) */
+    if (mode === 'atrial' || mode === 'av_sequential' || mode === 'biventricular') {
+      out.pWaves = [];
+    }
+
     while (t < duration) {
       beatNo++;
       var captured = true;
@@ -352,6 +367,8 @@ window.EKG = window.EKG || {};
         if (captured) complexes.push({ t: t + 0.20, kind: 'paced', mode: 'v', ampScale: 1 });
       } else {
         // ventricular or biventricular
+        // CRT tracks the patient's own P wave and paces both ventricles after it.
+        if (mode === 'biventricular') out.pWaves.push({ t: t - 0.13, kind: 'sinus' });
         var st = sensed ? t : t - 0.12;   // undersensing: spike lands too early
         spikes.push({ t: st, chamber: 'V', captured: captured && sensed });
         if (captured && sensed) {

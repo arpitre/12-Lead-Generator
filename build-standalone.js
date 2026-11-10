@@ -25,6 +25,7 @@ const SCRIPTS = [
   'assets/js/generator.js',
   'assets/js/interpret.js',
   'assets/js/catalog.js',
+  'assets/js/treatment.js',
   'assets/js/explain.js',
   'assets/js/render.js',
   'assets/js/calipers.js',

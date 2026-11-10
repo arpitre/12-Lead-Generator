@@ -326,9 +326,13 @@ window.EKG = window.EKG || {};
     if (patternNames[cfg.pattern]) lines.push(patternNames[cfg.pattern]);
 
     /* QTc flag. Meaningless in a wide complex or chaotic rhythm — repolarisation
-     * is abnormal by definition there — so it is only reported when the
-     * measurement actually says something. */
-    if (meas.qtc && meas.qtc > 480 && stReadable) lines.push('PROLONGED QTc INTERVAL');
+     * is abnormal by definition there, and a bundle branch block lengthens the
+     * QT by widening the QRS — so it is only reported when the measurement
+     * actually says something, and not twice when the pattern already says it. */
+    var qtAlreadyNamed = cfg.pattern === 'hypocalcemia' || cfg.pattern === 'lqts';
+    if (meas.qtc && meas.qtc > 480 && stReadable && meas.qrs < 120 && !qtAlreadyNamed) {
+      lines.push('PROLONGED QTc INTERVAL');
+    }
 
     // --- artifact
     var artifactNames = {
