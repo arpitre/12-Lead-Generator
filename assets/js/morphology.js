@@ -60,8 +60,17 @@ window.EKG = window.EKG || {};
         : 0.90 * Math.sin(Math.PI * (u - 0.60) / 0.40);
     },
     u: function (u) { return asym(u, 0.5); },
-    // Slow, ramped upstroke -- the WPW delta wave.
-    delta: function (u) { return u * u * (3 - 2 * u); },
+    /* The WPW delta wave: a slow, nearly straight ramp for the first half
+     * (muscle depolarising cell to cell from the pathway's insertion), which
+     * then hands over to the normal activation and dies away beneath it. */
+    delta: function (u) {
+      if (u < 0.62) return Math.pow(u / 0.62, 1.15);
+      return 0.5 * (1 + Math.cos(Math.PI * (u - 0.62) / 0.38));
+    },
+    // A pathological Q: drops promptly, then hands back to the surviving R.
+    qwave: function (u) { return asym(u, 0.42); },
+    // Strain T wave: a slow slide down and a quick snap back.
+    tStrain: function (u) { return asym(u, 0.74); },
     coved: function (u) { return 1 - 0.55 * u * u; }
   };
 
@@ -145,7 +154,7 @@ window.EKG = window.EKG || {};
       wall: 'interventricular septum', leads: 'V1-V2'
     },
     anterior: {
-      label: 'Anterior', dir: [0.05, 0.10, -1], artery: 'LAD',
+      label: 'Anterior', dir: [0.30, 0.10, -1], artery: 'LAD',
       wall: 'anterior wall of the left ventricle', leads: 'V3-V4'
     },
     anteroseptal: {
@@ -165,7 +174,7 @@ window.EKG = window.EKG || {};
       wall: 'lateral wall of the left ventricle', leads: 'I, aVL, V5-V6'
     },
     high_lateral: {
-      label: 'High lateral', dir: [0.87, -0.50, 0.00], artery: 'First diagonal or high circumflex',
+      label: 'High lateral', dir: [0.55, -0.75, -0.35], artery: 'First diagonal or high circumflex',
       wall: 'high lateral wall', leads: 'I, aVL'
     },
     inferior: {
@@ -204,34 +213,64 @@ window.EKG = window.EKG || {};
 
   function axisAngle(cfg) {
     if (cfg.axis === 'lad') return -45;
-    if (cfg.axis === 'rad') return 115;
+    if (cfg.axis === 'rad') return 110;
     if (cfg.axis === 'extreme') return -120;
     if (typeof cfg.axis === 'number') return cfg.axis;
     return 55; // normal
   }
 
+  /* How far forward the early forces lean and how far back the late ones do.
+   * Those two numbers are what turn the QRS from a line into a loop. */
+  var EARLY_Z = -0.25, LATE_Z = 0.90;
+
+  /* A rightward axis is not the whole loop swung round to the right. The
+   * left ventricle still starts the QRS heading down and left; it is the
+   * LATE forces that end up pointing right. So lead I gets a small r and
+   * then a deep S, and V5-V6 keep an R wave with a deep S after it. Rotating
+   * both halves together instead made V5-V6 entirely negative, which is what
+   * dextrocardia looks like, not right axis deviation. */
+  function axisSplit(angle) {
+    return (angle > 90 && angle <= 180) ? [-35, 30] : [0, 0];
+  }
+
   function baseTemplate(cfg) {
     var alpha = axisAngle(cfg);
-    var main = axisDir(alpha, 0.22);
 
     return {
       alpha: alpha,
       pr: 160,
       pDur: 100,
       pAmp: 0.15,
-      pDir: unit([0.5, 0.87, -0.18]),
+      pDir: unit([0.45, 0.85, -0.35]),
       pShape: 'p',
+      pParts: null,            // optional two-component P wave (atrial enlargement)
       prSegmentShift: 0,       // PR-segment depression (pericarditis)
+      prSegmentDir: null,
       qrsDur: 95,
+      /* Ventricular depolarisation is a loop, not a line. The free wall is
+       * activated apex-and-anterior first and base-and-posterior last, so the
+       * vector swings from leftward-anterior round to leftward-posterior as
+       * the QRS goes by.
+       *
+       * Modelling that as ONE main lobe gives every lead the same waveform
+       * scaled by a cosine, and the lead lying across the vector gets nothing:
+       * V3 came out as a tiny fragmented squiggle between a deep S in V2 and a
+       * tall R in V4. With an early and a late lobe pointing different ways,
+       * the transition lead sees the first one coming and the second one
+       * going -- an honest RS complex -- and R-wave progression across the
+       * chest falls out of the geometry. */
       lobes: [
-        { t0: 0,  t1: 22, amp: 0.20, dir: unit([-0.56, 0.10, -0.82]), shape: 'bump', tag: 'septal' },
-        { t0: 6,  t1: 72, amp: 1.55, dir: main,                        shape: 'bump', tag: 'main' },
-        { t0: 54, t1: 95, amp: 0.16, dir: unit([-0.51, -0.56, 0.66]),  shape: 'bump', tag: 'terminal' }
+        { t0: 0,  t1: 24, amp: 0.16, dir: unit([-0.56, 0.10, -0.82]),  shape: 'bump', tag: 'septal' },
+        { t0: 8,  t1: 58, amp: 0.85, dir: axisDir(alpha + axisSplit(alpha)[0], EARLY_Z), shape: 'bump', tag: 'main' },
+        { t0: 26, t1: 80, amp: 0.90, dir: axisDir(alpha + axisSplit(alpha)[1], LATE_Z),  shape: 'bump', tag: 'main2' },
+        { t0: 58, t1: 95, amp: 0.14, dir: unit([-0.50, -0.50, 0.70]),  shape: 'bump', tag: 'terminal' }
       ],
       stSeg: 90,               // J point to T onset, ms
       tDur: 180,
-      tAmp: 0.32,
-      tDir: axisDir(alpha - 12, -0.10),
+      tAmp: 0.30,
+      /* The normal T vector points left, down and FORWARD, which is why the
+       * tallest T waves on a normal tracing are in V2-V4. */
+      tDir: unit(add(axisDir(alpha - 15, 0), [0, 0, -0.50])),
       tShape: 't',
       tExtra: null,            // optional second repolarisation vector
       stVec: [0, 0, 0],
@@ -244,11 +283,42 @@ window.EKG = window.EKG || {};
     };
   }
 
-  function mainLobe(tpl) {
+  function lobeByTag(tpl, tag) {
     for (var i = 0; i < tpl.lobes.length; i++) {
-      if (tpl.lobes[i].tag === 'main') return tpl.lobes[i];
+      if (tpl.lobes[i].tag === tag) return tpl.lobes[i];
     }
-    return tpl.lobes[0];
+    return null;
+  }
+
+  function mainLobe(tpl) { return lobeByTag(tpl, 'main') || tpl.lobes[0]; }
+
+  // Both free-wall lobes, early then late (either may have been removed).
+  function mainLobes(tpl) {
+    return tpl.lobes.filter(function (l) { return l.tag === 'main' || l.tag === 'main2'; });
+  }
+
+  /* Net direction of the QRS: what "concordant" and "discordant" are measured
+   * against, and where a J wave or an Osborn wave points. */
+  function qrsDir(tpl) {
+    var v = [0, 0, 0];
+    tpl.lobes.forEach(function (l) {
+      v = add(v, scale(l.dir, l.amp * (l.t1 - l.t0)));
+    });
+    return unit(v);
+  }
+
+  // Rotate the whole free-wall loop to a new frontal axis, keeping its depth.
+  function setAxis(tpl, angle, earlyZ, lateZ) {
+    var e = lobeByTag(tpl, 'main'), l = lobeByTag(tpl, 'main2');
+    var split = axisSplit(angle);
+    if (e) e.dir = axisDir(angle + split[0], earlyZ === undefined ? EARLY_Z : earlyZ);
+    if (l) l.dir = axisDir(angle + split[1], lateZ === undefined ? LATE_Z : lateZ);
+  }
+
+  function scaleMain(tpl, kEarly, kLate) {
+    var e = lobeByTag(tpl, 'main'), l = lobeByTag(tpl, 'main2');
+    if (e) e.amp *= kEarly;
+    if (l) l.amp *= (kLate === undefined ? kEarly : kLate);
   }
 
   function dropLobe(tpl, tag) {
@@ -262,79 +332,115 @@ window.EKG = window.EKG || {};
     tpl.qrsDur = newDur;
   }
 
+  function shiftLobes(tpl, ms) {
+    tpl.lobes.forEach(function (l) { l.t0 += ms; l.t1 += ms; });
+    tpl.qrsDur += ms;
+  }
+
   /* --------------------------------------------------- conduction defects */
+
+  var RBBB_DIR = unit([-0.65, -0.05, -0.76]);
+
+  function applyRbbbTerminal(tpl, endMs) {
+    // Right ventricle depolarises late, unopposed: a slow terminal vector
+    // pointing right and anterior. rSR' in V1, wide slurred S in I and V6.
+    dropLobe(tpl, 'terminal');
+    tpl.lobes.push({ t0: 60, t1: endMs, amp: 0.58, dir: RBBB_DIR, shape: 'bump', tag: 'rbbbTerminal' });
+    tpl.qrsDur = endMs;
+    // Appropriate discordance: ST/T opposite the terminal forces (V1-V3).
+    tpl.stVec = add(tpl.stVec, scale(RBBB_DIR, -0.07));
+    tpl.tDir = unit(add(scale(tpl.tDir, 0.70), scale(RBBB_DIR, -0.75)));
+  }
 
   function applyConduction(tpl, cfg) {
     switch (cfg.ivcd) {
       case 'rbbb':
-        // Right ventricle depolarises late, unopposed: a slow terminal vector
-        // pointing right and anterior. rSR' in V1, wide slurred S in I and V6.
-        tpl.lobes.push({
-          t0: 62, t1: 138, amp: 0.62, dir: unit([-0.78, -0.08, -0.62]),
-          shape: 'bump', tag: 'rbbbTerminal'
-        });
-        tpl.qrsDur = 138;
-        // Appropriate discordance: ST/T opposite the terminal forces (V1-V3).
-        tpl.stVec = add(tpl.stVec, scale(unit([-0.78, -0.08, -0.62]), -0.09));
-        tpl.tDir = unit(add(scale(tpl.tDir, 0.75), scale(unit([-0.78, -0.08, -0.62]), -0.55)));
+        applyRbbbTerminal(tpl, 138);
         break;
 
       case 'lbbb':
-        // The left ventricle is activated late and from the right, so the
-        // normal left-to-right septal vector disappears (no septal q in I/V6)
-        // and everything is one broad, slurred leftward-posterior sweep.
-        dropLobe(tpl, 'septal');
-        dropLobe(tpl, 'terminal');
-        var lb = mainLobe(tpl);
-        lb.t0 = 0; lb.t1 = 150; lb.amp = 1.85;
-        lb.dir = axisDir(Math.min(axisAngle(cfg), 10), 0.40);
-        tpl.lobes.push({ t0: 30, t1: 120, amp: 0.45, dir: axisDir(-20, 0.55), shape: 'bump', tag: 'lbbbNotch' });
+        /* The left ventricle is activated late, slowly, and from the right, so
+         * the normal left-to-right septal vector disappears (no septal q in
+         * I/V6) and the whole QRS is one broad leftward sweep that ends up
+         * pointing well posterior.
+         *
+         * Two overlapping humps rather than one: the first heads left, the
+         * second left-and-back. That gives the notched "M" in I, aVL and V6,
+         * a slurred QS in V1-V2, and an rS rather than a dead-flat line in the
+         * transition leads.
+         *
+         * The voltages are those of a slow muscle-to-muscle wavefront. Run
+         * through the normal QRS amplitudes this pattern drove every lateral
+         * lead off the top of the paper and V1-V2 off the bottom. */
+        var lbAng = Math.max(-45, Math.min(axisAngle(cfg) - 45, 20));
+        tpl.lobes = [
+          { t0: 0,  t1: 96,  amp: 0.92, dir: axisDir(lbAng, 0.30),      shape: 'bump', tag: 'main' },
+          { t0: 56, t1: 150, amp: 0.82, dir: axisDir(lbAng - 8, 1.00),  shape: 'bump', tag: 'main2' }
+        ];
         tpl.qrsDur = 150;
-        tpl.stVec = add(tpl.stVec, scale(lb.dir, -0.13));
-        tpl.tDir = scale(lb.dir, -1);
-        tpl.tAmp = 0.42;
+        var lbDir = qrsDir(tpl);
+        tpl.stVec = add(tpl.stVec, scale(lbDir, -0.19));
+        tpl.stShape = 'oblique';
+        tpl.tDir = scale(lbDir, -1);
+        tpl.tAmp = 0.30;
         break;
 
       case 'lafb':
         // Anterior fascicle blocked: the impulse reaches the anterosuperior LV
         // late and from below, swinging the axis up and left. qR in I/aVL,
         // rS in II/III/aVF.
-        mainLobe(tpl).dir = axisDir(-50, 0.20);
-        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.24, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
+        setAxis(tpl, -55);
+        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.22, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
         tpl.qrsDur = 100;
+        tpl.tDir = unit(add(axisDir(20, 0), [0, 0, -0.50]));
         break;
 
       case 'lpfb':
-        mainLobe(tpl).dir = axisDir(112, 0.20);
+        setAxis(tpl, 112);
         tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.22, dir: unit([0.85, -0.45, -0.25]), shape: 'bump', tag: 'lpfbInitial' });
         tpl.qrsDur = 100;
         break;
 
       case 'bifascicular':
-        mainLobe(tpl).dir = axisDir(-55, 0.20);
-        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.24, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
-        tpl.lobes.push({ t0: 62, t1: 140, amp: 0.62, dir: unit([-0.78, -0.08, -0.62]), shape: 'bump', tag: 'rbbbTerminal' });
-        tpl.qrsDur = 140;
-        tpl.tDir = unit(add(scale(tpl.tDir, 0.75), scale(unit([-0.78, -0.08, -0.62]), -0.55)));
+        setAxis(tpl, -58);
+        tpl.lobes.unshift({ t0: 0, t1: 26, amp: 0.22, dir: unit([-0.15, 0.95, -0.25]), shape: 'bump', tag: 'lafbInitial' });
+        tpl.tDir = unit(add(axisDir(20, 0), [0, 0, -0.50]));
+        applyRbbbTerminal(tpl, 140);
         break;
 
       case 'ivcd':
         stretchQrs(tpl, 125);
-        mainLobe(tpl).amp *= 0.95;
+        scaleMain(tpl, 0.95);
         break;
 
       case 'wpw':
-        // Accessory pathway pre-excites ventricular muscle directly: short PR,
-        // slurred delta upstroke, and the QRS is a fusion of both routes.
-        tpl.pr = 95;
-        tpl.lobes.unshift({
-          t0: 0, t1: 55, amp: 0.55,
-          dir: cfg.wpwType === 'b' ? unit([-0.45, 0.55, -0.70]) : unit([0.60, 0.45, 0.65]),
-          shape: 'delta', tag: 'delta'
-        });
-        tpl.qrsDur = 125;
-        tpl.tDir = scale(mainLobe(tpl).dir, -0.6);
-        tpl.tAmp = 0.30;
+        /* An accessory pathway pre-excites ventricular muscle directly. Three
+         * things follow, and all three have to be on the page:
+         *   - the PR is short, because the AV-node delay was bypassed;
+         *   - the QRS starts with a slow slur (the delta wave), because that
+         *     first muscle is depolarised cell to cell;
+         *   - the QRS is wide, because the normal activation arrives on time
+         *     and is simply added to the end of the pre-excited part.
+         * So the normal lobes are pushed LATER and the delta wave fills the
+         * gap in front of them. Starting them all together, as this used to,
+         * hides the delta inside a normal upstroke. */
+        var typeB = cfg.wpwType === 'b';
+        var deltaDir = typeB
+          ? unit([0.80, -0.20, 0.55])    // right-sided pathway: away from V1
+          : unit([0.15, 0.55, -0.82]);   // left-sided pathway: toward V1
+        dropLobe(tpl, 'septal');
+        shiftLobes(tpl, 32);
+        if (!typeB) {
+          // The posterobasal LV has already been depolarised through the
+          // pathway, so the late posterior forces that normally write the S
+          // wave in V1 are largely missing: dominant R in V1.
+          setAxis(tpl, axisAngle(cfg), -0.60, 0.05);
+        }
+        tpl.lobes.unshift({ t0: 0, t1: 74, amp: 0.46, dir: deltaDir, shape: 'delta', tag: 'delta' });
+        tpl.pr = 100;
+        tpl.tDir = unit(add(scale(tpl.tDir, 0.55), scale(deltaDir, -0.70)));
+        tpl.tAmp = 0.24;
+        tpl.stVec = add(tpl.stVec, scale(deltaDir, -0.05));
         break;
     }
     return tpl;
@@ -345,49 +451,107 @@ window.EKG = window.EKG || {};
   function applyChambers(tpl, cfg) {
     switch (cfg.chambers) {
       case 'lvh':
-        mainLobe(tpl).amp *= 1.55;
-        mainLobe(tpl).dir = axisDir(axisAngle(cfg) - 10, 0.30);
+        setAxis(tpl, axisAngle(cfg) - 20, -0.20, 1.05);
+        scaleMain(tpl, 1.40, 1.45);
         tpl.qrsDur = Math.max(tpl.qrsDur, 100);
         break;
       case 'lvh_strain':
-        mainLobe(tpl).amp *= 1.60;
-        mainLobe(tpl).dir = axisDir(axisAngle(cfg) - 12, 0.30);
+        setAxis(tpl, axisAngle(cfg) - 25, -0.20, 1.05);
+        scaleMain(tpl, 1.45, 1.50);
         tpl.qrsDur = Math.max(tpl.qrsDur, 102);
-        // Strain: downsloping ST depression with asymmetric T inversion in the
-        // leads that face the thick muscle (I, aVL, V5, V6).
-        tpl.stVec = add(tpl.stVec, scale(unit([0.92, -0.10, -0.15]), -0.13));
-        tpl.tDir = unit([-0.90, 0.10, 0.30]);
-        tpl.tAmp = 0.34;
+        /* Strain: downsloping ST depression running into an asymmetric
+         * inverted T in the leads that face the thick muscle (I, aVL, V5, V6),
+         * with the mirror image -- ST elevation and a tall upright T -- in
+         * V1-V3. The repolarisation vector therefore has to point right AND
+         * forward; pointing it backward inverts the T in V2-V3 as well, which
+         * turns strain into something that looks like anterior ischaemia. */
+        tpl.stVec = add(tpl.stVec, scale(unit([-0.80, 0.10, -0.60]), 0.14));
+        tpl.tDir = unit([-0.85, 0.40, -0.55]);
+        tpl.tAmp = 0.24;
+        tpl.tShape = 'tStrain';
         tpl.stShape = 'downslope';
         break;
       case 'rvh':
-        mainLobe(tpl).dir = axisDir(115, -0.35); // right and anterior: tall R in V1
-        mainLobe(tpl).amp *= 1.15;
-        tpl.lobes.push({ t0: 50, t1: 100, amp: 0.30, dir: unit([-0.65, -0.30, -0.70]), shape: 'bump', tag: 'rvhTerminal' });
-        tpl.tDir = unit([0.20, 0.30, 0.85]); // T inversion V1-V3
-        tpl.tAmp = 0.30;
+        /* A thick right ventricle drags the whole loop rightward and forward:
+         * a dominant R in V1, an rS in V6, a deep S in lead I. */
+        var rvE = lobeByTag(tpl, 'main'), rvL = lobeByTag(tpl, 'main2'), rvT = lobeByTag(tpl, 'terminal');
+        if (rvE) { rvE.dir = unit([0.15, 0.75, -0.40]); rvE.amp = 0.85; }
+        if (rvL) { rvL.dir = unit([-0.75, 0.45, -0.35]); rvL.amp = 0.90; }
+        // The left ventricle still finishes last and behind: an S wave in
+        // V2-V4 after the tall R, rather than pure R waves right across.
+        if (rvT) { rvT.dir = unit([-0.60, -0.20, 0.75]); rvT.amp = 0.30; rvT.t1 = 100; }
+        tpl.qrsDur = Math.max(tpl.qrsDur, 100);
+        tpl.stVec = add(tpl.stVec, scale(unit([0.20, 0.10, 0.95]), 0.06));
+        tpl.tDir = unit([0.50, 0.40, 0.75]); // T inversion V1-V3
+        tpl.tAmp = 0.22;
+        tpl.stShape = 'downslope';
         break;
       case 'lae':
+        /* The left atrium depolarises second, and it sits at the back. An
+         * enlarged one stretches the second half of the P wave and points it
+         * posteriorly: a broad notched P in II, and in V1 a small upright
+         * start followed by a deep, wide negative finish. */
         tpl.pDur = 130;
-        tpl.pShape = 'pNotched';
-        tpl.pAmp = 0.14;
-        tpl.pDir = unit([0.55, 0.62, 0.55]); // terminal posterior force: biphasic P in V1
+        tpl.pParts = [
+          { u0: 0.00, u1: 0.58, amp: 0.11, dir: unit([0.40, 0.85, -0.40]) },
+          { u0: 0.42, u1: 1.00, amp: 0.12, dir: unit([0.70, 0.40, 0.65]) }
+        ];
         break;
       case 'rae':
         tpl.pAmp = 0.30;
-        tpl.pDir = unit([0.35, 0.90, -0.35]);
+        tpl.pDir = unit([0.30, 0.90, -0.40]);
         break;
       case 'biatrial':
         tpl.pDur = 130;
-        tpl.pAmp = 0.28;
-        tpl.pShape = 'pNotched';
-        tpl.pDir = unit([0.45, 0.80, 0.15]);
+        tpl.pParts = [
+          { u0: 0.00, u1: 0.55, amp: 0.28, dir: unit([0.30, 0.90, -0.40]) },
+          { u0: 0.42, u1: 1.00, amp: 0.13, dir: unit([0.70, 0.40, 0.65]) }
+        ];
         break;
     }
     return tpl;
   }
 
   /* --------------------------------------------------- ischemia / infarct */
+
+  /* Dead muscle, drawn as what it actually is: missing forces.
+   *
+   * A pathological Q wave is not an extra deflection bolted onto the front of
+   * a normal QRS. It is what is left when the wall under the electrode stops
+   * contributing -- the lead looks through an electrical hole and records the
+   * opposite wall depolarising away from it. Two things therefore happen
+   * together, and the old model only did the first:
+   *
+   *   1. an early vector appears pointing AWAY from the scar (the Q wave);
+   *   2. the forces that used to point TOWARD the scar shrink (the R wave
+   *      over the infarct is small or gone).
+   *
+   * Without (2) the tracing shows a narrow little q in front of a full-height
+   * R wave, which is a normal septal q, not an infarct. With it, an anterior
+   * scar gives QS complexes in V1-V3 with the R wave only recovering by
+   * V4-V5, and an inferior scar gives a wide Q with a stunted R in III and
+   * aVF and a smaller q in II.
+   *
+   * kEarly / kLate are the fraction of toward-the-scar force removed from the
+   * early and late parts of the QRS; qAmp is the size of the unopposed
+   * opposite-wall vector. */
+  function applyScar(tpl, n, kEarly, kLate, qAmp, qDur) {
+    n = unit(n);
+    tpl.lobes.forEach(function (lo) {
+      var k = (lo.tag === 'main2' || lo.tag === 'terminal') ? kLate : kEarly;
+      if (!k) return;
+      var v = scale(lo.dir, lo.amp);
+      var toward = v[0] * n[0] + v[1] * n[1] + v[2] * n[2];
+      if (toward <= 0) return;
+      v = add(v, scale(n, -k * toward));
+      var m = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+      lo.amp = m;
+      if (m > 1e-6) lo.dir = scale(v, 1 / m);
+    });
+    if (qAmp > 0) {
+      tpl.lobes.unshift({ t0: 0, t1: qDur || 46, amp: qAmp, dir: scale(n, -1), shape: 'qwave', tag: 'qwave' });
+    }
+  }
 
   function applyIschemia(tpl, cfg) {
     var terr = TERRITORIES[cfg.ischemia];
@@ -403,25 +567,22 @@ window.EKG = window.EKG || {};
        * projection onto all six limb leads, because they lie in the frontal
        * plane. So it inverts V1-V4 hardest, fades through V5, and leaves V6
        * and every limb lead untouched -- which is precisely the distribution
-       * Wellens has. Replacing the T vector outright (the previous approach)
-       * flattened the limb leads, which real Wellens does not do.
-       *
-       * The normal T is trimmed a little so the added vector can carry the
-       * anterior leads negative without needing an implausible magnitude. */
+       * Wellens has. */
       if (cfg.ischemia === 'wellens_b') {
         // Type B: deep, symmetric, rounded T inversion in V2-V4.
-        tpl.tAmp = 0.22;
-        tpl.tExtra = { amp: 0.26, dir: [0, 0, 1], shape: 'tSym' };
+        tpl.tAmp = 0.20;
+        tpl.tShape = 'tSym';
+        tpl.tExtra = { amp: 0.36, dir: [0, 0, 1], shape: 'tSym' };
       } else {
         /* Type A: biphasic. The ST-T leaves the J point slightly elevated,
-         * arcs up into a broad rounded positive hump, then descends through
-         * the baseline into a shallower terminal negative trough.
+         * arcs up into a rounded positive hump, then descends through the
+         * baseline into a terminal negative trough.
          *
          * A negative shape value points the vector anterior (upright in the
          * chest leads) and a positive one points it posterior (inverted), so
          * one biphasic shape produces the whole up-then-down morphology. */
-        tpl.tAmp = 0.18;
-        tpl.tExtra = { amp: 0.105, dir: [0, 0, 1], shape: 'wellensBiphasic' };
+        tpl.tAmp = 0.10;
+        tpl.tExtra = { amp: 0.15, dir: [0, 0, 1], shape: 'wellensBiphasic' };
         tpl.stVec = add(tpl.stVec, scale(unit([0.05, 0.0, -1]), 0.05));
         tpl.stShape = 'oblique';
       }
@@ -430,12 +591,14 @@ window.EKG = window.EKG || {};
 
     if (cfg.ischemia === 'de_winter') {
       // Proximal LAD occlusion equivalent: upsloping ST depression at the J
-      // point in the precordials, running into tall symmetric T waves.
-      tpl.stVec = [0.05, 0.05, 0.30];
+      // point in the precordials, running into tall symmetric T waves, with a
+      // little ST elevation in aVR.
+      tpl.stVec = [-0.05, -0.02, 0.19];
       tpl.stShape = 'upslope';
-      tpl.tDir = unit([0.10, 0.10, -0.95]);
-      tpl.tAmp = 0.75;
+      tpl.tDir = unit([0.15, 0.10, -0.95]);
+      tpl.tAmp = 0.50;
       tpl.tShape = 'tSym';
+      tpl.stSeg = 70;
       return tpl;
     }
 
@@ -443,28 +606,44 @@ window.EKG = window.EKG || {};
 
     var mag = SEVERITY[cfg.severity] || SEVERITY.moderate;
     var dir = unit(terr.dir);
+    var posterior = cfg.ischemia === 'posterior' || cfg.ischemia === 'inferoposterior';
+
+    if (cfg.ischemia === 'subendocardial') {
+      /* Not an occlusion: the whole inner layer is short of oxygen, and the
+       * injury current points away from the cavity -- toward aVR. Horizontal
+       * or downsloping depression everywhere else, T waves flattened rather
+       * than transformed, QRS untouched. */
+      tpl.stVec = add(tpl.stVec, scale(dir, mag));
+      tpl.stShape = 'flat';
+      tpl.tAmp = 0.14;
+      return tpl;
+    }
 
     if (cfg.stage === 'hyperacute') {
       // Earliest minutes: the T wave grows fat and broad-based over the
       // infarct before the ST segment properly lifts.
-      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.55));
+      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.45));
       tpl.stShape = 'oblique';
       tpl.tDir = unit(add(scale(tpl.tDir, 0.25), scale(dir, 1.0)));
-      tpl.tAmp = 0.80;
+      tpl.tAmp = 0.52;
       tpl.tShape = 'tSym';
-      tpl.tDur = 210;
+      tpl.tDur = 215;
+      tpl.stSeg = 70;
     } else if (cfg.stage === 'evolving') {
-      // Hours to days: ST settles, Q waves appear, T waves invert.
-      tpl.stVec = add(tpl.stVec, scale(dir, mag * 0.45));
+      /* Hours to days: the ST segment is settling but still up and still
+       * domed, Q waves have formed, and the T wave has turned over -- the
+       * terminal T inversion of a completed infarct. */
+      tpl.stVec = add(tpl.stVec, scale(dir, Math.max(0.10, mag * 0.55)));
       tpl.stShape = 'convex';
-      tpl.tDir = unit(add(scale(tpl.tDir, 0.2), scale(dir, -1.0)));
-      tpl.tAmp = 0.45;
+      tpl.tDir = unit(add(scale(tpl.tDir, 0.15), scale(dir, -1.0)));
+      tpl.tAmp = 0.30;
       tpl.tShape = 'tSym';
-      tpl.lobes.unshift({ t0: 0, t1: 40, amp: mag * 1.6, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
+      applyScar(tpl, dir, 0.75, posterior ? 0.70 : 0.30, 0.28, 46);
     } else if (cfg.stage === 'old') {
-      // Established scar: Q waves only, ST back to baseline.
-      tpl.lobes.unshift({ t0: 0, t1: 42, amp: 0.62, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
-      tpl.tDir = unit(add(scale(tpl.tDir, 0.6), scale(dir, -0.5)));
+      // Established scar: Q waves and lost R waves; ST back on the baseline.
+      applyScar(tpl, dir, 0.92, posterior ? 0.80 : 0.35, 0.36, 56);
+      tpl.tDir = unit(add(scale(tpl.tDir, 0.75), scale(dir, -0.45)));
+      tpl.tAmp = 0.22;
     } else {
       /* Acute: the classic injury pattern. Real STEMI takes off convex
        * ("domed") or obliquely straight -- never the concave saddle of early
@@ -473,12 +652,23 @@ window.EKG = window.EKG || {};
        * of a STEMI's ST-T dome sits only a little above its J point. */
       tpl.stVec = add(tpl.stVec, scale(dir, mag));
       tpl.stShape = (cfg.severity === 'marked' || cfg.severity === 'tombstone') ? 'convex' : 'oblique';
-      tpl.tDir = unit(add(scale(tpl.tDir, 0.45), scale(dir, 0.85)));
-      tpl.tAmp = 0.32;
-
-      if (cfg.qWaves) {
-        tpl.lobes.unshift({ t0: 0, t1: 40, amp: mag * 1.5, dir: scale(dir, -1), shape: 'bump', tag: 'qwave' });
+      if (posterior) {
+        /* The posterior wall is read in a mirror. Behind the heart the T is
+         * part of the injury dome; from the front that same vector shows as
+         * ST depression, and the classic V1-V3 picture -- a tall R, a
+         * depressed ST and an UPRIGHT T -- is the mirror image of the Q wave,
+         * ST elevation and T inversion of an infarct a few hours old. */
+        tpl.tDir = unit(add(scale(tpl.tDir, 0.80), scale(dir, cfg.ischemia === 'posterior' ? -0.70 : 0.25)));
+        tpl.tAmp = 0.30;
+        // Horizontal, not deepening: the mirror of a flat-topped elevation.
+        if (cfg.ischemia === 'posterior') tpl.stShape = 'flat';
+        applyScar(tpl, [0.10, 0.10, 1.0], 0, 0.75, 0.22, 50);
+      } else {
+        tpl.tDir = unit(add(scale(tpl.tDir, 0.45), scale(dir, 0.85)));
+        tpl.tAmp = 0.30;
       }
+
+      if (cfg.qWaves) applyScar(tpl, dir, 0.60, 0.20, 0.24, 44);
     }
 
     /* Injured muscle generates little late depolarisation force, which is why
@@ -495,7 +685,7 @@ window.EKG = window.EKG || {};
      * STEMI loses its terminal forces almost entirely. Deliberately NOT
      * applied to pericarditis or early repolarisation (handled in
      * applyPattern): that muscle is alive and keeps its normal S waves. */
-    if (mag > 0 && cfg.ischemia !== 'subendocardial') {
+    if (mag > 0 && cfg.stage !== 'old') {
       tpl.lobes.forEach(function (lo) {
         if (lo.tag === 'terminal') lo.amp *= 1 / (1 + 12 * mag);
       });
@@ -538,6 +728,7 @@ window.EKG = window.EKG || {};
         var sineMain = mainLobe(tpl);
         dropLobe(tpl, 'septal');
         dropLobe(tpl, 'terminal');
+        dropLobe(tpl, 'main2');
         tpl.pAmp = 0; tpl.pr = 0;              // atrial muscle is paralysed
         sineMain.t0 = 0;
         sineMain.t1 = Math.min(420, cycle * 0.40);
@@ -600,7 +791,7 @@ window.EKG = window.EKG || {};
         break;
       case 'hypok':
         tpl.tAmp = 0.10; tpl.uAmp = 0.22; tpl.uDur = 160;
-        tpl.stVec = add(tpl.stVec, scale(unit(mainLobe(tpl).dir), -0.07));
+        tpl.stVec = add(tpl.stVec, scale(qrsDir(tpl), -0.07));
         tpl.stShape = 'downslope';
         break;
       case 'hypercalcemia':
@@ -610,52 +801,75 @@ window.EKG = window.EKG || {};
         tpl.stSeg = 210; tpl.tDur = 180;
         break;
       case 'digoxin':
-        // "Salvador Dali moustache": sagging ST depression, short QT.
-        tpl.stSeg = 50; tpl.tDur = 150; tpl.tAmp = 0.16;
-        tpl.stVec = add(tpl.stVec, scale(unit(mainLobe(tpl).dir), -0.10));
+        /* The "reverse tick": the ST segment sags away from the QRS in a
+         * smooth scoop and hooks back up into a small terminal T, with a
+         * short QT. It follows the QRS -- deepest where the R wave is
+         * tallest -- rather than any coronary territory. */
+        tpl.stSeg = 110; tpl.tDur = 110; tpl.tAmp = 0.11;
+        tpl.stVec = add(tpl.stVec, scale(qrsDir(tpl), -0.11));
         tpl.stShape = 'sagging';
+        tpl.shortQT = true;
         break;
       case 'hypothermia':
         // Osborn (J) wave: a positive hump right at the end of the QRS, in the
         // same direction as the main QRS forces.
         tpl.lobes.push({
           t0: tpl.qrsDur - 10, t1: tpl.qrsDur + 60, amp: 0.42,
-          dir: unit(mainLobe(tpl).dir), shape: 'bump', tag: 'osborn'
+          dir: qrsDir(tpl), shape: 'bump', tag: 'osborn'
         });
         tpl.stSeg = 120; tpl.tDur = 200; tpl.pr = 220;
         break;
       case 'pericarditis':
-        // Diffuse epicardial injury: ST elevation almost everywhere, with PR
-        // segment depression from atrial involvement.
-        tpl.stVec = add(tpl.stVec, scale(unit([0.30, 0.72, -0.62]), 0.17));
+        /* Diffuse epicardial injury: concave ST elevation in almost every
+         * lead (I, II, aVF, V2-V6), depression only in aVR and sometimes V1,
+         * and PR-segment depression from the inflamed atria -- with the PR
+         * segment going UP in aVR. */
+        tpl.stVec = add(tpl.stVec, scale(unit([0.55, 0.65, -0.50]), 0.20));
         tpl.stShape = 'concave';
-        tpl.prSegmentShift = -0.055;
-        tpl.tAmp = 0.36;
+        tpl.prSegmentShift = -0.08;
+        tpl.prSegmentDir = unit([0.55, 0.65, -0.30]);
+        tpl.tAmp = 0.34;
         break;
       case 'early_repol':
         tpl.stVec = add(tpl.stVec, scale(unit([0.30, 0.45, -0.85]), 0.14));
         tpl.stShape = 'concave';
-        tpl.tAmp = 0.55;
+        tpl.tAmp = 0.46;
         tpl.lobes.push({
-          t0: tpl.qrsDur - 12, t1: tpl.qrsDur + 26, amp: 0.16,
-          dir: unit(mainLobe(tpl).dir), shape: 'bump', tag: 'jNotch'
+          t0: tpl.qrsDur - 12, t1: tpl.qrsDur + 26, amp: 0.14,
+          dir: unit([0.55, 0.45, -0.70]), shape: 'bump', tag: 'jNotch'
         });
         break;
       case 'brugada':
-        tpl.overlays.push({
-          leads: ['V1', 'V2'], t0: 'j', dur: 260, amp: 0.32, shape: 'covedST', tag: 'brugada'
-        });
-        tpl.lobes.push({ t0: 60, t1: 120, amp: 0.30, dir: unit([-0.70, -0.25, -0.66]), shape: 'bump', tag: 'brugadaR' });
-        tpl.qrsDur = Math.max(tpl.qrsDur, 120);
+        /* Type 1: an rSR'-like complex in V1-V2 whose terminal R' never comes
+         * back down -- it leaves at 2 mm or more and slides, coved, straight
+         * into an inverted T wave. It is a strictly local right-ventricular
+         * outflow phenomenon, so it is drawn on V1-V2 alone and the rest of
+         * the tracing stays normal. */
+        tpl.qrsDur = Math.max(tpl.qrsDur, 110);
+        // Flatten the ordinary T in the right chest leads so the coved
+        // descent, not a normal upright T, decides what V1-V2 look like.
+        tpl.tDir = unit(add(axisDir(tpl.alpha - 15, 0), [0.15, 0, 0.05]));
+        // The overlay starts inside the terminal QRS and climbs to its
+        // take-off point, so the r' and the coved ST are one unbroken line.
+        tpl.overlays.push({ leads: ['V1'], t0: 'j', lead: -42, dur: 340, amp: 0.27, shape: 'covedST', tag: 'brugada' });
+        tpl.overlays.push({ leads: ['V2'], t0: 'j', lead: -42, dur: 340, amp: 0.38, shape: 'covedST', tag: 'brugada' });
         break;
       case 'pe':
-        // S1Q3T3 plus right heart strain: right axis, S in I, Q and inverted
-        // T in III, T inversion across the right precordials.
-        mainLobe(tpl).dir = axisDir(100, 0.20);
-        tpl.lobes.push({ t0: 52, t1: 108, amp: 0.34, dir: unit([-0.85, -0.20, 0.48]), shape: 'bump', tag: 'sWaveI' });
-        tpl.lobes.unshift({ t0: 0, t1: 34, amp: 0.26, dir: unit([0.30, -0.92, 0.24]), shape: 'bump', tag: 'qIII' });
-        tpl.tDir = unit([0.15, -0.35, 0.92]);
-        tpl.tAmp = 0.30;
+        /* Acute right heart strain. The dilated right ventricle rotates the
+         * heart clockwise and conducts late:
+         *   S1  - a late rightward force (S wave in I, persisting to V6)
+         *   Q3  - a small early force pointing up and left (q in III, r in I)
+         *   T3  - T inversion in III, and across V1-V4
+         * plus a rightward axis and an incomplete RBBB. The R waves in the
+         * lateral chest leads are still there -- they just have an S after
+         * them. */
+        setAxis(tpl, 80, -0.20, 0.80);
+        dropLobe(tpl, 'terminal');
+        tpl.lobes.push({ t0: 54, t1: 108, amp: 0.36, dir: unit([-0.85, -0.15, -0.25]), shape: 'bump', tag: 'sWaveI' });
+        tpl.lobes.unshift({ t0: 0, t1: 30, amp: 0.34, dir: unit([0.75, -0.60, 0.00]), shape: 'bump', tag: 'qIII' });
+        tpl.tDir = unit([0.55, -0.15, 0.80]);
+        tpl.tAmp = 0.22;
+        tpl.tShape = 'tSym';
         tpl.qrsDur = Math.max(tpl.qrsDur, 108);
         break;
       case 'low_voltage':
@@ -663,7 +877,7 @@ window.EKG = window.EKG || {};
         break;
       case 'tca':
         stretchQrs(tpl, 140);
-        tpl.lobes.push({ t0: 80, t1: 140, amp: 0.42, dir: unit([-0.86, -0.50, 0.10]), shape: 'bump', tag: 'terminalR_aVR' });
+        tpl.lobes.push({ t0: 80, t1: 140, amp: 0.50, dir: unit([-0.86, -0.50, 0.10]), shape: 'bump', tag: 'terminalR_aVR' });
         tpl.stSeg = 140; tpl.tDur = 200;
         break;
       case 'lqts':
@@ -675,58 +889,66 @@ window.EKG = window.EKG || {};
 
   /* ------------------------------------------------------ ectopic beats */
 
-  // A ventricular beat: no P wave, wide and bizarre, T wave opposite the QRS.
-  function ventricularTemplate(cfg, origin) {
+  /* A beat that starts in ventricular muscle. No P wave, wide, and the T wave
+   * opposite the QRS.
+   *
+   * Like the normal beat it is a loop, not a line: the wavefront leaves the
+   * focus heading one way and finishes heading another. Drawn as a single
+   * direction, whichever chest lead happened to lie across it recorded
+   * nothing at all, and a ventricular tachycardia came out with a dead-flat
+   * V4 between two rows of huge complexes. */
+  function wideTemplate(cfg, dA, dB, dur, amp) {
     var tpl = baseTemplate(cfg);
     tpl.pAmp = 0; tpl.pr = 0;
-    tpl.lobes = [];
-    var dir;
-    if (origin === 'lv') {
-      // Left ventricular focus: depolarisation runs left-to-right, so V1 goes
-      // positive — an RBBB-like morphology with a rightward axis.
-      dir = unit([-0.35, 0.55, -0.75]);
-    } else if (origin === 'rvot') {
-      // Right ventricular outflow tract: LBBB-like, but heading downward,
-      // giving the characteristic tall inferior complexes.
-      dir = unit([0.35, 0.90, 0.25]);
-    } else {
-      // Right ventricular focus: LBBB-like with the classic left superior
-      // ("northwest") axis — negative in II, III and aVF, negative in V1.
-      dir = unit([0.34, -0.94, 0.35]);
-    }
-    tpl.lobes.push({ t0: 0, t1: 148, amp: 1.45, dir: dir, shape: 'bump', tag: 'main' });
-    tpl.lobes.push({ t0: 40, t1: 130, amp: 0.38, dir: unit(add(dir, [0.2, 0.2, 0.1])), shape: 'bump', tag: 'slur' });
-    tpl.qrsDur = 148;
-    tpl.stSeg = 60;
+    dA = unit(dA); dB = unit(dB);
+    tpl.lobes = [
+      { t0: 0,          t1: dur * 0.64, amp: amp * 0.92, dir: dA, shape: 'bump', tag: 'main' },
+      { t0: dur * 0.30, t1: dur,        amp: amp * 1.10, dir: dB, shape: 'bump', tag: 'main2' }
+    ];
+    tpl.qrsDur = dur;
+    var net = qrsDir(tpl);
+    tpl.stSeg = 50;
     tpl.tDur = 210;
-    tpl.tAmp = 0.55;
-    tpl.tDir = scale(dir, -1);
-    tpl.stVec = scale(dir, -0.12);
-    tpl.stShape = 'flat';
+    tpl.tAmp = 0.42;
+    tpl.tShape = 'tSym';
+    tpl.tDir = scale(net, -1);
+    tpl.stVec = scale(net, -0.20);
+    tpl.stShape = 'oblique';
     tpl.overlays = [];
     return tpl;
   }
 
-  // A paced beat: RV apical lead gives an LBBB-like, left-axis complex.
+  function ventricularTemplate(cfg, origin) {
+    if (origin === 'lv') {
+      // Left ventricular focus: depolarisation runs left-to-right, so V1 goes
+      // positive (RBBB-like) with a rightward axis and a deep S in V6.
+      return wideTemplate(cfg, [-0.30, 0.40, -0.80], [-0.75, 0.55, -0.10], 150, 1.35);
+    }
+    if (origin === 'rvot') {
+      // Right ventricular outflow tract: LBBB-like, but heading downward,
+      // giving the characteristic tall inferior complexes.
+      return wideTemplate(cfg, [0.20, 0.85, -0.10], [0.45, 0.80, 0.65], 142, 1.30);
+    }
+    // Right ventricular apex: LBBB-like with a left superior axis -- negative
+    // in II, III and aVF, a deep QS in V1-V3, upright in I, aVL and V6.
+    return wideTemplate(cfg, [0.55, -0.55, 0.10], [0.25, -0.80, 0.75], 150, 1.35);
+  }
+
+  // A paced beat: an RV apical lead gives an LBBB-like, left-axis complex.
   function pacedTemplate(cfg, mode) {
-    var tpl = baseTemplate(cfg);
-    tpl.lobes = [];
-    /* Right ventricular apical pacing depolarises from the apex upward, so the
-     * axis swings left and superior: negative in II, III and aVF, deeply
-     * negative in V1 (LBBB-like), positive in I and V6. */
-    var dir = unit([0.32, -0.88, 0.38]);
-    if (mode === 'biv') dir = unit([-0.45, 0.40, -0.72]); // biventricular: often positive in V1
-    tpl.lobes.push({ t0: 0, t1: 158, amp: 1.45, dir: dir, shape: 'bump', tag: 'main' });
-    tpl.lobes.push({ t0: 45, t1: 140, amp: 0.35, dir: unit(add(dir, [0.15, 0.25, 0])), shape: 'bump', tag: 'slur' });
-    tpl.qrsDur = 158;
-    tpl.stSeg = 70;
-    tpl.tDur = 210;
-    tpl.tAmp = 0.5;
-    tpl.tDir = scale(dir, -1);
-    tpl.stVec = scale(dir, -0.14);
-    tpl.pAmp = 0;
-    tpl.pr = 0;
-    tpl.overlays = [];
+    var tpl;
+    if (mode === 'biv') {
+      // Biventricular: the LV lead fires from the lateral wall, so activation
+      // runs rightward -- a dominant R in V1, negative in lead I, and a
+      // narrower QRS than RV pacing alone.
+      tpl = wideTemplate(cfg, [-0.50, 0.20, -0.75], [-0.60, -0.50, -0.20], 138, 1.05);
+    } else {
+      /* Right ventricular apical pacing depolarises from the apex upward, so
+       * the axis swings left and superior: negative in II, III and aVF,
+       * deeply negative in V1 (LBBB-like), positive in I and aVL. */
+      tpl = wideTemplate(cfg, [0.60, -0.60, 0.20], [0.20, -0.80, 0.70], 158, 1.20);
+    }
+    tpl.stSeg = 60;
     return tpl;
   }
 
@@ -740,7 +962,10 @@ window.EKG = window.EKG || {};
     // A sine wave is already sized to the cycle; rescaling would undo that.
     if (tpl.sineWave) return tpl;
     var k = Math.sqrt(meanRR / 0.8);
-    k = Math.max(0.72, Math.min(1.38, k));
+    /* The floor matters at SVT rates: holding the QT at 72% of its resting
+     * length made every fast narrow tachycardia print a "prolonged QTc". */
+    k = Math.max(0.58, Math.min(1.38, k));
+    if (tpl.shortQT) k = Math.min(k, 1.0);
     tpl.stSeg *= k;
     tpl.tDur *= k;
     tpl.uDur *= k;
@@ -772,6 +997,7 @@ window.EKG = window.EKG || {};
     ventricularTemplate: ventricularTemplate,
     pacedTemplate: pacedTemplate,
     axisAngle: axisAngle,
-    mainLobe: mainLobe
+    mainLobe: mainLobe,
+    qrsDir: qrsDir
   };
 })(window.EKG);

@@ -422,7 +422,7 @@ window.EKG = window.EKG || {};
     P('Hypokalemia with U waves', 'Metabolic & tox', { rhythm: 'sinus', rate: 78, pattern: 'hypok' }),
     P('Hypocalcemia (long QT)', 'Metabolic & tox', { rhythm: 'sinus', rate: 70, pattern: 'hypocalcemia' }),
     P('Digoxin effect', 'Metabolic & tox', { rhythm: 'afib', rate: 64, pattern: 'digoxin' }),
-    P('Tricyclic overdose', 'Metabolic & tox', { rhythm: 'sinus_tach', rate: 128, pattern: 'tca', axis: 'rad' },
+    P('Tricyclic overdose', 'Metabolic & tox', { rhythm: 'sinus_tach', rate: 128, pattern: 'tca' },
       'Wide QRS, tachycardia, and a terminal R wave in aVR. Sodium bicarbonate, not amiodarone.'),
     P('Hypothermia with Osborn waves', 'Metabolic & tox', { rhythm: 'sinus_brady', rate: 38, pattern: 'hypothermia', artifact: 'tremor' }),
 

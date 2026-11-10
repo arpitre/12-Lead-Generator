@@ -21,9 +21,11 @@ window.EKG = window.EKG || {};
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  // Minimal inline formatting for the explanation text: **bold** only.
+  // Minimal inline formatting for the explanation text: **bold** and *italic*.
   function fmt(s) {
-    return escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    return escapeHtml(s)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+?)\*/g, '$1<em>$2</em>');
   }
 
   /* ------------------------------------------------------- build panel */
@@ -314,7 +316,7 @@ window.EKG = window.EKG || {};
     state.explanation.sections.forEach(function (sec, i) {
       var d = document.createElement('details');
       d.className = 'exp-section';
-      if (i < 2) d.open = true;
+      if (i < 2 || sec.id === 'field') d.open = true;
 
       var sum = document.createElement('summary');
       sum.innerHTML = '<span class="exp-step">' + (i + 1) + '</span>' +
@@ -324,7 +326,17 @@ window.EKG = window.EKG || {};
 
       var body = document.createElement('div');
       body.className = 'exp-body';
+      // Consecutive lines starting "- " are gathered into one bulleted list.
+      var listEl = null;
       sec.body.forEach(function (p) {
+        if (p.indexOf('- ') === 0) {
+          if (!listEl) { listEl = document.createElement('ul'); listEl.className = 'exp-list'; body.appendChild(listEl); }
+          var li = document.createElement('li');
+          li.innerHTML = fmt(p.slice(2));
+          listEl.appendChild(li);
+          return;
+        }
+        listEl = null;
         var el = document.createElement('p');
         el.innerHTML = fmt(p);
         body.appendChild(el);

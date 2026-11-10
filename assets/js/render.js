@@ -18,6 +18,8 @@ window.EKG = window.EKG || {};
     colWidth: 62.5,     // 2.5 seconds at 25 mm/s
     cols: 4,
     rowHeight: 30,
+    headroom: 6,
+    overlap: 9,         // how far a tall complex may run into the next row
     rhythmHeight: 32,
     headerHeight: 31
   };
@@ -45,7 +47,8 @@ window.EKG = window.EKG || {};
   }
 
   /* Build the polyline for one lead over one time window. */
-  function tracePath(data, fs, t0, t1, x0, baselineY, clip) {
+  function tracePath(data, fs, t0, t1, x0, baselineY, clip, clipDown) {
+    if (clipDown === undefined) clipDown = clip;
     var i0 = Math.max(0, Math.round(t0 * fs));
     var i1 = Math.min(data.length - 1, Math.round(t1 * fs));
     var pts = [];
@@ -53,7 +56,7 @@ window.EKG = window.EKG || {};
       var x = x0 + ((i - i0) / fs) * MM_PER_SEC;
       var y = baselineY - data[i] * MM_PER_MV;
       if (y < baselineY - clip) y = baselineY - clip;
-      if (y > baselineY + clip) y = baselineY + clip;
+      if (y > baselineY + clipDown) y = baselineY + clipDown;
       pts.push(x.toFixed(2) + ',' + y.toFixed(2));
     }
     return pts.join(' ');
@@ -79,7 +82,9 @@ window.EKG = window.EKG || {};
     var nLines = blind ? 2 : Math.min(interp.lines.length, maxLines);
     var headerH = blind ? 20
       : 15 + (interp.alert ? 7 : 0) + nLines * 4.1 + 4;
-    var tracingTop = PAGE.pad + headerH;
+    /* A few millimetres of clear paper above the first row, so a tall R wave
+     * there has somewhere to go before it reaches the printed header. */
+    var tracingTop = PAGE.pad + headerH + PAGE.headroom;
     var H = tracingTop + PAGE.rowHeight * 3 + PAGE.rhythmHeight + PAGE.pad + 5;
 
     var s = [];
@@ -96,7 +101,7 @@ window.EKG = window.EKG || {};
       '<path d="M5,0 L0,0 0,5" fill="none" class="grid-major" stroke-width="0.22"/></pattern>' +
       '</defs>');
     s.push('<rect width="' + W + '" height="' + H + '" class="paper"/>');
-    s.push('<rect x="0" y="' + (tracingTop - 3) + '" width="' + W + '" height="' + (H - tracingTop + 3) +
+    s.push('<rect x="0" y="' + (tracingTop - 3 - PAGE.headroom) + '" width="' + W + '" height="' + (H - tracingTop + 3 + PAGE.headroom) +
       '" fill="url(#majorGrid)"/>');
 
     // ---- header
@@ -117,7 +122,11 @@ window.EKG = window.EKG || {};
     }
 
     // ---- twelve lead panels
-    var clip = PAGE.rowHeight / 2 - 1.2;
+    /* Real machines do not chop a tall complex off at the edge of its row --
+     * it simply runs up into the row above, and a big LVH or LBBB tracing has
+     * overlapping leads. Clipping at the row boundary squared the tops off
+     * every large R wave and made the true voltage unmeasurable. */
+    var clip = PAGE.rowHeight / 2 + PAGE.overlap;
     for (var row = 0; row < 3; row++) {
       var baseY = rows[row] + PAGE.rowHeight / 2;
 
@@ -152,6 +161,7 @@ window.EKG = window.EKG || {};
     var ry = tracingTop + PAGE.rowHeight * 3;
     var rBase = ry + PAGE.rhythmHeight / 2;
     var rClip = PAGE.rhythmHeight / 2 - 1.2;
+    var rClipUp = PAGE.rhythmHeight / 2 + PAGE.overlap;
     s.push('<line x1="' + PAGE.pad + '" y1="' + ry + '" x2="' + (W - PAGE.pad) + '" y2="' + ry + '" class="row-sep"/>');
     var rcx = PAGE.pad + 2;
     s.push('<polyline class="trace" points="' +
@@ -162,7 +172,7 @@ window.EKG = window.EKG || {};
     s.push('<text x="' + (PAGE.pad + PAGE.calWidth + 1.5) + '" y="' + (ry + 5.5) + '" class="lead-label">' +
       rhythmLead + '  (rhythm strip)</text>');
     s.push('<polyline class="trace" points="' +
-      tracePath(result.leads[rhythmLead], result.fs, 0, result.duration, PAGE.pad + PAGE.calWidth, rBase, rClip) + '"/>');
+      tracePath(result.leads[rhythmLead], result.fs, 0, result.duration, PAGE.pad + PAGE.calWidth, rBase, rClipUp, rClip) + '"/>');
     s.push(pacerSpikes(result, 0, result.duration, PAGE.pad + PAGE.calWidth, rBase, rClip));
 
     // ---- technical footer, exactly the sort of line a monitor prints
